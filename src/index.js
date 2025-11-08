@@ -89,8 +89,8 @@ async function handleRequest(request, env, ctx) {
     return serveDNSEncodingExplanation();
   }
   
-  // Handle CORS preflight requests
-  if (request.method === 'OPTIONS') {
+    // Handle CORS preflight requests
+    if (request.method === 'OPTIONS') {
     return handleCORS();
   }
 
@@ -137,21 +137,21 @@ async function handleRequest(request, env, ctx) {
 
     // Create the upstream request
     const upstreamRequest = new Request(targetUrl, {
-      method: request.method,
+        method: request.method,
       headers: headers,
       body: requestBody,
       redirect: 'follow'
     });
 
     // Send request to DoH provider
-    const response = await fetch(upstreamRequest);
-
+      const response = await fetch(upstreamRequest);
+      
     // Create response with proper headers
-    const responseHeaders = new Headers(response.headers);
+      const responseHeaders = new Headers(response.headers);
     
     // Add CORS headers
-    responseHeaders.set('Access-Control-Allow-Origin', '*');
-    responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      responseHeaders.set('Access-Control-Allow-Origin', '*');
+      responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
     
     // Set cache control for DNS responses
@@ -159,12 +159,12 @@ async function handleRequest(request, env, ctx) {
     responseHeaders.set('Expires', new Date(Date.now() + CACHE_TTL * 1000).toUTCString());
     responseHeaders.set('X-Provider', selectedProvider.name);
 
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
       headers: responseHeaders
-    });
-  } catch (error) {
+      });
+    } catch (error) {
     // Try fallback providers if the primary one fails
     return await tryFallbackProviders(request, url, selectedProvider, DOH_PROVIDERS, CACHE_TTL, requestBody, isPost);
   }
@@ -178,20 +178,62 @@ function serveLandingPage(request, PROVIDERS) {
   
   const html = `
   <!DOCTYPE html>
-  <html lang="en" dir="ltr">
+  <html lang="en" dir="ltr" data-theme="dark">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>High-Performance DoH Proxy | پروکسی DNS با عملکرد بالا</title>
+    <title>High-Performance DoH Proxy</title>
+    <script>
+      // Prevent flash of unstyled content - set theme immediately
+      (function() {
+        // Always use dark theme
+        var theme = 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.lang = 'en';
+        document.documentElement.dir = 'ltr';
+      })();
+    </script>
     <style>
       :root {
-        --primary: #3b82f6;
-        --primary-dark: #2563eb;
-        --secondary: #10b981;
-        --dark: #1e293b;
-        --light: #f8fafc;
-        --gray: #94a3b8;
-        --border: #e2e8f0;
+        --primary: #00ff41;
+        --primary-dark: #00cc33;
+        --secondary: #00ff41;
+        --kali-green: #00ff41;
+        --kali-dark: #0a0e27;
+        --kali-bg: #0a0e27;
+        --kali-card: #1a1f3a;
+        --kali-border: #00ff41;
+        --kali-text: #00ff41;
+        --kali-text-dim: #00cc33;
+        --kali-shadow: rgba(0, 255, 65, 0.3);
+      }
+      
+      [data-theme="dark"] {
+        --bg-primary: #0a0e27;
+        --bg-secondary: #1a1f3a;
+        --bg-card: #1a1f3a;
+        --bg-card-hover: #252b4a;
+        --text-primary: #00ff41;
+        --text-secondary: #00cc33;
+        --text-muted: #00aa22;
+        --border-color: #00ff41;
+        --shadow: rgba(0, 255, 65, 0.2);
+        --gradient-start: #0a0e27;
+        --gradient-end: #0a0e27;
+      }
+      
+      [data-theme="light"] {
+        --bg-primary: #0a0e27;
+        --bg-secondary: #1a1f3a;
+        --bg-card: #1a1f3a;
+        --bg-card-hover: #252b4a;
+        --text-primary: #00ff41;
+        --text-secondary: #00cc33;
+        --text-muted: #00aa22;
+        --border-color: #00ff41;
+        --shadow: rgba(0, 255, 65, 0.2);
+        --gradient-start: #0a0e27;
+        --gradient-end: #0a0e27;
       }
       
       * {
@@ -201,74 +243,93 @@ function serveLandingPage(request, PROVIDERS) {
       }
       
       body {
-        font-family: 'Segoe UI', system-ui, -apple-system, 'Tahoma', 'Arial', sans-serif;
+        font-family: 'Courier New', 'Consolas', 'Monaco', 'Lucida Console', monospace;
         line-height: 1.6;
-        color: var(--dark);
-        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        color: var(--kali-text);
+        background: var(--kali-bg);
         min-height: 100vh;
         padding: 20px;
-        transition: all 0.3s ease;
+        transition: background 0.3s ease, color 0.3s ease;
+        position: relative;
+        overflow-x: hidden;
       }
       
-      body.rtl {
-        direction: rtl;
-        font-family: 'Segoe UI', system-ui, -apple-system, 'Tahoma', 'Arial', sans-serif;
-      }
-      
-      .encoding-list {
-        margin-left: 20px;
-        margin-bottom: 15px;
-      }
-      
-      body.rtl .encoding-list {
-        margin-left: 0;
-        margin-right: 20px;
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: 
+          repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(0, 255, 65, 0.03) 2px,
+            rgba(0, 255, 65, 0.03) 4px
+          );
+        pointer-events: none;
+        z-index: 0;
       }
       
       .container {
         max-width: 1200px;
         margin: 0 auto;
+        position: relative;
+        z-index: 1;
       }
       
-      .language-selector {
+      .top-controls {
         position: fixed;
         top: 20px;
         right: 20px;
         z-index: 1001;
         display: flex;
         gap: 10px;
-        background: white;
-        padding: 8px;
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        align-items: center;
       }
       
-      .lang-btn {
-        padding: 8px 16px;
-        border: 2px solid var(--border);
-        background: white;
-        color: var(--dark);
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: 500;
+      .social-links {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      
+      .social-link {
+        width: 50px;
+        height: 50px;
+        border-radius: 0;
+        border: 2px solid var(--kali-border);
+        background: var(--kali-card);
+        color: var(--kali-text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+        font-size: 1.3rem;
         transition: all 0.3s ease;
-        font-size: 0.9rem;
+        box-shadow: 0 0 10px var(--kali-shadow);
+        position: relative;
+        z-index: 1002;
       }
       
-      .lang-btn:hover {
-        border-color: var(--primary);
-        color: var(--primary);
+      .social-link:hover {
+        transform: translateY(-3px) scale(1.1);
+        border-color: var(--kali-text);
+        background: var(--kali-text);
+        color: var(--kali-bg);
+        box-shadow: 0 0 20px var(--kali-text);
       }
       
-      .lang-btn.active {
-        background: var(--primary);
-        color: white;
-        border-color: var(--primary);
+      .social-link.github:hover {
+        background: var(--kali-text);
+        border-color: var(--kali-text);
       }
       
-      body.rtl .language-selector {
-        right: auto;
-        left: 20px;
+      .social-link.telegram:hover {
+        background: var(--kali-text);
+        border-color: var(--kali-text);
       }
       
       header {
@@ -277,76 +338,157 @@ function serveLandingPage(request, PROVIDERS) {
         margin-bottom: 30px;
       }
       
+      .kali-banner {
+        font-family: 'Courier New', monospace;
+        color: var(--kali-text);
+        text-align: center;
+        margin: 20px auto;
+        font-size: 0.7rem;
+        line-height: 1.2;
+        text-shadow: 0 0 10px var(--kali-text);
+        white-space: pre;
+        overflow-x: auto;
+        max-width: 100%;
+      }
+      
+      @media (max-width: 768px) {
+        .kali-banner {
+          font-size: 0.5rem;
+        }
+      }
+      
       h1 {
         font-size: 2.8rem;
         margin-bottom: 15px;
-        color: var(--dark);
-        background: linear-gradient(90deg, var(--primary), var(--secondary));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: var(--kali-text);
+        text-shadow: 0 0 10px var(--kali-text), 0 0 20px var(--kali-text);
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
+        letter-spacing: 3px;
       }
       
       .subtitle {
         font-size: 1.3rem;
-        color: var(--gray);
+        color: var(--kali-text-dim);
         max-width: 700px;
         margin: 0 auto 25px;
+        font-family: 'Courier New', monospace;
+        text-shadow: 0 0 5px var(--kali-text-dim);
+        min-height: 2em;
+      }
+      
+      .developer-credit {
+        font-size: 1rem;
+        color: var(--kali-text-dim);
+        max-width: 700px;
+        margin: 15px auto 25px;
+        font-family: 'Courier New', monospace;
+        text-shadow: 0 0 8px var(--kali-text-dim);
+        text-align: center;
+        opacity: 0.8;
+      }
+      
+      .typing-effect {
+        display: inline-block;
+        font-family: 'Courier New', monospace;
+        color: var(--kali-text);
+        text-shadow: 0 0 10px var(--kali-text);
+      }
+      
+      .typing-cursor {
+        display: inline-block;
+        width: 2px;
+        height: 1.2em;
+        background: var(--kali-text);
+        margin-left: 3px;
+        animation: blink 1s infinite;
+        vertical-align: middle;
+        box-shadow: 0 0 10px var(--kali-text);
+      }
+      
+      @keyframes blink {
+        0%, 50% {
+          opacity: 1;
+        }
+        51%, 100% {
+          opacity: 0;
+        }
       }
       
       .endpoint-card {
-        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-        color: white;
-        border-radius: 16px;
+        background: var(--kali-card);
+        color: var(--kali-text);
+        border-radius: 0;
         padding: 30px;
         margin-bottom: 40px;
         text-align: center;
-        box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+        box-shadow: 0 0 20px var(--kali-shadow);
+        border: 2px solid var(--kali-border);
+        position: relative;
+      }
+      
+      .endpoint-card::before {
+        content: '>>>';
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: var(--kali-text);
+        font-family: 'Courier New', monospace;
+        font-size: 1.2rem;
       }
       
       .endpoint-card h2 {
         font-size: 2rem;
         margin-bottom: 15px;
-        color: white;
+        color: var(--kali-text);
+        text-shadow: 0 0 10px var(--kali-text);
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
       }
       
       .endpoint-card p {
         font-size: 1.2rem;
         margin-bottom: 25px;
-        opacity: 0.9;
+        color: var(--kali-text-dim);
+        font-family: 'Courier New', monospace;
       }
       
       .endpoint-url {
-        background: rgba(255, 255, 255, 0.15);
-        border-radius: 12px;
+        background: var(--kali-bg);
+        border-radius: 0;
         padding: 20px;
-        font-family: 'Consolas', 'Monaco', monospace;
+        font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
         font-size: 1.1rem;
         margin: 25px 0;
         word-break: break-all;
         position: relative;
         text-align: left;
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        border: 2px solid var(--kali-border);
+        color: var(--kali-text);
+        box-shadow: inset 0 0 10px var(--kali-shadow);
       }
       
       .copy-btn {
-        background: white;
-        color: var(--primary);
-        border: none;
+        background: var(--kali-bg);
+        color: var(--kali-text);
+        border: 2px solid var(--kali-border);
         padding: 12px 25px;
-        border-radius: 8px;
-        font-weight: 600;
+        border-radius: 0;
+        font-weight: normal;
         font-size: 1.1rem;
         cursor: pointer;
         transition: all 0.3s ease;
         margin-top: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 0 10px var(--kali-shadow);
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
       }
       
       .copy-btn:hover {
-        background: var(--light);
+        background: var(--kali-text);
+        color: var(--kali-bg);
         transform: translateY(-2px);
-        box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        box-shadow: 0 0 20px var(--kali-text);
       }
       
       .copy-btn:active {
@@ -354,30 +496,58 @@ function serveLandingPage(request, PROVIDERS) {
       }
       
       .card {
-        background: white;
-        border-radius: 16px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        background: var(--kali-card);
+        border-radius: 0;
+        box-shadow: 0 0 15px var(--kali-shadow);
         padding: 30px;
         margin-bottom: 30px;
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+        border: 2px solid var(--kali-border);
+        position: relative;
+      }
+      
+      .card::before {
+        content: '$';
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: var(--kali-text);
+        font-family: 'Courier New', monospace;
+        font-size: 1.2rem;
       }
       
       .card:hover {
         transform: translateY(-5px);
-        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 0 25px var(--kali-text);
+        border-color: var(--kali-text);
       }
       
       h2 {
         font-size: 1.8rem;
         margin-bottom: 20px;
-        color: var(--dark);
+        color: var(--kali-text);
         display: flex;
         align-items: center;
         gap: 10px;
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
+        text-shadow: 0 0 10px var(--kali-text);
       }
       
       h2 i {
-        color: var(--primary);
+        color: var(--kali-text);
+      }
+      
+      h3 {
+        color: var(--kali-text);
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
+        text-shadow: 0 0 5px var(--kali-text);
+      }
+      
+      p {
+        color: var(--kali-text-dim);
+        font-family: 'Courier New', monospace;
       }
       
       .features {
@@ -418,10 +588,27 @@ function serveLandingPage(request, PROVIDERS) {
       }
       
       .provider {
-        background: var(--light);
-        border-radius: 12px;
+        background: var(--kali-bg);
+        border-radius: 0;
         padding: 20px;
-        border: 1px solid var(--border);
+        border: 2px solid var(--kali-border);
+        transition: all 0.3s ease;
+        position: relative;
+      }
+      
+      .provider::before {
+        content: '●';
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: var(--kali-text);
+        font-family: 'Courier New', monospace;
+      }
+      
+      .provider:hover {
+        border-color: var(--kali-text);
+        transform: translateY(-2px);
+        box-shadow: 0 0 15px var(--kali-text);
       }
       
       .provider-header {
@@ -432,51 +619,103 @@ function serveLandingPage(request, PROVIDERS) {
       }
       
       .provider-name {
-        font-weight: 600;
+        font-weight: normal;
         font-size: 1.1rem;
+        color: var(--kali-text);
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
       }
       
       .provider-weight {
-        background: var(--primary);
-        color: white;
+        background: var(--kali-text);
+        color: var(--kali-bg);
         padding: 4px 10px;
-        border-radius: 20px;
+        border-radius: 0;
         font-size: 0.9rem;
+        font-family: 'Courier New', monospace;
+        border: 1px solid var(--kali-text);
       }
       
       .provider-url {
-        color: var(--gray);
+        color: var(--kali-text-dim);
         font-size: 0.9rem;
         word-break: break-all;
+        font-family: 'Courier New', monospace;
       }
       
       .provider-description {
-        color: var(--gray);
+        color: var(--kali-text-dim);
         font-size: 0.8rem;
         margin-top: 8px;
-        font-style: italic;
+        font-style: normal;
+        font-family: 'Courier New', monospace;
       }
       
       .usage-examples {
-        background: var(--dark);
-        color: white;
-        border-radius: 16px;
+        background: var(--kali-card);
+        color: var(--kali-text);
+        border-radius: 0;
         padding: 30px;
+        border: 2px solid var(--kali-border);
+        box-shadow: 0 0 15px var(--kali-shadow);
       }
       
       .usage-examples h2 {
-        color: white;
+        color: var(--kali-text);
+        text-shadow: 0 0 10px var(--kali-text);
+      }
+      
+      .usage-examples h3 {
+        color: var(--kali-text);
+        margin-top: 20px;
+        text-shadow: 0 0 5px var(--kali-text);
+      }
+      
+      .usage-examples p {
+        color: var(--kali-text-dim);
+      }
+      
+      .usage-examples a {
+        color: var(--kali-text);
+        text-decoration: underline;
+        text-shadow: 0 0 5px var(--kali-text);
+      }
+      
+      .usage-examples a:hover {
+        color: var(--kali-text);
+        text-shadow: 0 0 10px var(--kali-text);
+      }
+      
+      .usage-examples strong {
+        color: var(--kali-text);
+        text-shadow: 0 0 5px var(--kali-text);
+      }
+      
+      .usage-examples ul li {
+        color: var(--kali-text-dim);
       }
       
       .code-block {
-        background: #0f172a;
-        color: #ffffff;
-        border-radius: 10px;
+        background: var(--kali-bg);
+        color: var(--kali-text);
+        border-radius: 0;
         padding: 20px;
         margin: 15px 0;
-        font-family: 'Consolas', 'Monaco', monospace;
+        font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
         font-size: 0.95rem;
         overflow-x: auto;
+        border: 2px solid var(--kali-border);
+        box-shadow: inset 0 0 10px var(--kali-shadow);
+        position: relative;
+      }
+      
+      .code-block::before {
+        content: '┌─';
+        position: absolute;
+        top: -2px;
+        left: -2px;
+        color: var(--kali-text);
+        font-family: 'Courier New', monospace;
       }
       
       .endpoint {
@@ -489,53 +728,55 @@ function serveLandingPage(request, PROVIDERS) {
       
       .btn {
         display: inline-block;
-        background: var(--primary);
-        color: white;
+        background: var(--kali-bg);
+        color: var(--kali-text);
         padding: 10px 20px;
-        border-radius: 8px;
+        border-radius: 0;
         text-decoration: none;
-        font-weight: 500;
+        font-weight: normal;
         margin-top: 15px;
-        transition: background 0.3s ease;
+        transition: all 0.3s ease;
+        border: 2px solid var(--kali-border);
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
+        box-shadow: 0 0 10px var(--kali-shadow);
       }
       
       .btn:hover {
-        background: var(--primary-dark);
+        background: var(--kali-text);
+        color: var(--kali-bg);
+        box-shadow: 0 0 20px var(--kali-text);
       }
       
       .copy-notification {
         position: fixed;
-        top: 20px;
+        top: 80px;
         right: 20px;
-        background: var(--dark);
-        color: white;
+        background: var(--kali-card);
+        color: var(--kali-text);
         padding: 15px 25px;
-        border-radius: 8px;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        border-radius: 0;
+        box-shadow: 0 0 20px var(--kali-text);
+        border: 2px solid var(--kali-border);
         transform: translateX(200%);
         transition: transform 0.3s ease;
         z-index: 1000;
-      }
-      
-      body.rtl .copy-notification {
-        right: auto;
-        left: 20px;
-        transform: translateX(-200%);
+        font-family: 'Courier New', monospace;
+        text-transform: uppercase;
+        text-shadow: 0 0 10px var(--kali-text);
       }
       
       .copy-notification.show {
         transform: translateX(0);
       }
       
-      body.rtl .copy-notification.show {
-        transform: translateX(0);
-      }
-      
       footer {
         text-align: center;
         padding: 30px 0;
-        color: var(--gray);
+        color: var(--kali-text-dim);
         font-size: 0.9rem;
+        font-family: 'Courier New', monospace;
+        text-shadow: 0 0 5px var(--kali-text-dim);
       }
       
       @media (max-width: 768px) {
@@ -547,6 +788,10 @@ function serveLandingPage(request, PROVIDERS) {
           font-size: 1.1rem;
         }
         
+        .developer-credit {
+          font-size: 0.9rem;
+        }
+        
         .card {
           padding: 20px;
         }
@@ -555,36 +800,64 @@ function serveLandingPage(request, PROVIDERS) {
           padding: 20px;
         }
         
-        .language-selector {
+        .top-controls {
           top: 10px;
           right: 10px;
-          padding: 6px;
+          flex-wrap: wrap;
+          gap: 8px;
         }
         
-        body.rtl .language-selector {
+        body.rtl .top-controls {
           right: auto;
           left: 10px;
+        }
+        
+        .social-link {
+          width: 45px;
+          height: 45px;
+          font-size: 1.1rem;
         }
       }
     </style>
   </head>
   <body>
-    <div class="language-selector">
-      <button class="lang-btn active" onclick="changeLanguage('en')" id="lang-en">English</button>
-      <button class="lang-btn" onclick="changeLanguage('fa')" id="lang-fa">فارسی</button>
+    <div class="top-controls">
+      <div class="social-links">
+        <a href="https://github.com/Darkcode-it/multi-provider-doh-proxy" target="_blank" rel="noopener noreferrer" class="social-link github" title="GitHub">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+        </a>
+        <a href="https://t.me/darkcodeit" target="_blank" rel="noopener noreferrer" class="social-link telegram" title="Telegram">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.941z"/>
+          </svg>
+        </a>
+      </div>
     </div>
     
     <div class="container">
       <header>
-        <h1 data-i18n="title">High-Performance DoH Proxy</h1>
-        <p class="subtitle" data-i18n="subtitle">A Cloudflare Worker that proxies DNS-over-HTTPS requests with enhanced performance, reliability, and security</p>
+        <pre class="kali-banner">
+    _    __     _ _     _    _       _ 
+   | |  / /__ _| | |__ | |  (_)___  | |
+   | | / / _ \` | | '_ \| |  | / __| | |
+   | |/ /  __/ | | |_) | |__| \__ \ |_|
+   |_/_/ \___|_|_|_.__/ \____|___/ (_)
+        </pre>
+        <h1>High-Performance DoH Proxy</h1>
+        <p class="subtitle">
+          <span class="typing-effect" id="typing-text"></span>
+          <span class="typing-cursor"></span>
+        </p>
+        <p class="developer-credit">Developed and designed by darkcodeit</p>
       </header>
       
       <div class="endpoint-card">
-        <h2 data-i18n="endpoint-title">🚀 Your DoH Endpoint</h2>
-        <p data-i18n="endpoint-desc">Use this URL as your DNS-over-HTTPS resolver</p>
+        <h2>🚀 Your DoH Endpoint</h2>
+        <p>Use this URL as your DNS-over-HTTPS resolver</p>
         <div class="endpoint-url" id="endpointUrl">${dnsEndpoint}</div>
-        <button class="copy-btn" onclick="copyToClipboard()" data-i18n="copy-btn">Copy Endpoint URL</button>
+        <button class="copy-btn" onclick="copyToClipboard()">Copy Endpoint URL</button>
       </div>
       
       <div class="features">
@@ -592,8 +865,8 @@ function serveLandingPage(request, PROVIDERS) {
           <div class="feature">
             <div class="feature-icon">⚡</div>
             <div class="feature-content">
-              <h3 data-i18n="feature1-title">Lightning Fast</h3>
-              <p data-i18n="feature1-desc">Leverages Cloudflare's global edge network for minimal latency and maximum performance.</p>
+              <h3>Lightning Fast</h3>
+              <p>Leverages Cloudflare's global edge network for minimal latency and maximum performance.</p>
             </div>
           </div>
         </div>
@@ -602,8 +875,8 @@ function serveLandingPage(request, PROVIDERS) {
           <div class="feature">
             <div class="feature-icon">🔄</div>
             <div class="feature-content">
-              <h3 data-i18n="feature2-title">Load Balancing</h3>
-              <p data-i18n="feature2-desc">Intelligently distributes requests across multiple DNS providers based on configurable weights.</p>
+              <h3>Load Balancing</h3>
+              <p>Intelligently distributes requests across multiple DNS providers based on configurable weights.</p>
             </div>
           </div>
         </div>
@@ -612,16 +885,16 @@ function serveLandingPage(request, PROVIDERS) {
           <div class="feature">
             <div class="feature-icon">🛡️</div>
             <div class="feature-content">
-              <h3 data-i18n="feature3-title">Automatic Failover</h3>
-              <p data-i18n="feature3-desc">Seamlessly switches to backup providers when primary ones experience issues.</p>
+              <h3>Automatic Failover</h3>
+              <p>Seamlessly switches to backup providers when primary ones experience issues.</p>
             </div>
           </div>
         </div>
       </div>
       
       <div class="card">
-        <h2 data-i18n="providers-title">📡 Supported DNS Providers</h2>
-        <p data-i18n="providers-desc">This proxy supports both general DNS providers and ad-blocking focused providers for enhanced privacy and security.</p>
+        <h2>📡 Supported DNS Providers</h2>
+        <p>This proxy supports both general DNS providers and ad-blocking focused providers for enhanced privacy and security.</p>
         <div class="providers">
           ${PROVIDERS.map(p => `
           <div class="provider">
@@ -631,50 +904,50 @@ function serveLandingPage(request, PROVIDERS) {
             </div>
             <div class="provider-url">${p.url}</div>
             ${(p.name === 'AdGuard' || p.name === 'ControlD' || p.name === 'Mullvad' || p.name === 'NextDNS') ? 
-              `<div class="provider-description" data-i18n="provider-adblock">Blocks ads, trackers, and malicious domains</div>` : ''}
+              `<div class="provider-description">Blocks ads, trackers, and malicious domains</div>` : ''}
           </div>
           `).join('')}
         </div>
       </div>
       
       <div class="card usage-examples">
-        <h2 data-i18n="usage-title">🔧 Usage Examples</h2>
-        <p data-i18n="usage-desc">Use this worker as a DoH endpoint:</p>
+        <h2>🔧 Usage Examples</h2>
+        <p>Use this worker as a DoH endpoint:</p>
         
-        <h3 data-i18n="get-title">GET Requests</h3>
-        <p data-i18n="get-desc">For GET requests, the DNS query must be base64url-encoded as per the <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">RFC 8484 specification</a>:</p>
+        <h3>GET Requests</h3>
+        <p>For GET requests, the DNS query must be base64url-encoded as per the <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">RFC 8484 specification</a>:</p>
         <div class="code-block">
           GET /dns-query?dns=&lt;base64url-encoded-dns-query&gt;
         </div>
-        <p><strong data-i18n="encoding-why-title">Why base64url encoding?</strong></p>
-        <ul class="encoding-list" data-i18n="encoding-why-list">
+        <p><strong>Why base64url encoding?</strong></p>
+        <ul class="encoding-list">
           <li>DNS queries are binary data that cannot be safely transmitted in URLs</li>
           <li>Base64url encoding converts binary data into a URL-safe string format</li>
           <li>Standard base64 uses characters like '+' and '/' which have special meaning in URLs</li>
           <li>Base64url replaces these with '-' and '_' making it URL-safe</li>
         </ul>
-        <p><a href="/dns-encoding" class="btn" data-i18n="encoding-link">Detailed DNS Encoding Explanation</a></p>
-        <p data-i18n="get-example">Example with curl:</p>
+        <p><a href="/dns-encoding" class="btn">Detailed DNS Encoding Explanation</a></p>
+        <p>Example with curl:</p>
         <div class="code-block">
           curl "${dnsEndpoint}?dns=q80BAAABAAAAAAAAA3d3dwdleGFtcGxlA2NvbQAAAQAB"
         </div>
         
-        <h3 data-i18n="post-title">POST Requests</h3>
-        <p data-i18n="post-desc">For POST requests, the DNS query is sent as binary data in the request body:</p>
+        <h3>POST Requests</h3>
+        <p>For POST requests, the DNS query is sent as binary data in the request body:</p>
         <div class="code-block">
           POST /dns-query<br>
           Content-Type: application/dns-message<br>
           &lt;binary-dns-query&gt;
         </div>
-        <p data-i18n="post-example">Example with curl:</p>
+        <p>Example with curl:</p>
         <div class="code-block">
           curl -H "Content-Type: application/dns-message" \\<br>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--data-binary @query.dns \\<br>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${dnsEndpoint}
         </div>
         
-        <h3 data-i18n="post-no-encoding-title">Using Without Base64 Encoding</h3>
-        <p data-i18n="post-no-encoding-desc">To avoid base64 encoding entirely, use POST requests with the <code>Content-Type: application/dns-message</code> header. The DNS query is sent as raw binary data in the request body:</p>
+        <h3>Using Without Base64 Encoding</h3>
+        <p>To avoid base64 encoding entirely, use POST requests with the <code>Content-Type: application/dns-message</code> header. The DNS query is sent as raw binary data in the request body:</p>
         <div class="code-block">
           curl -H "Content-Type: application/dns-message" \\<br>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--data-binary @query.dns \\<br>
@@ -683,9 +956,9 @@ function serveLandingPage(request, PROVIDERS) {
       </div>
       
       <div class="card">
-        <h2 data-i18n="config-title">⚙️ Configuration</h2>
-        <p data-i18n="config-desc">This worker automatically balances requests across multiple DNS providers based on the configured weights. All DNS responses are cached for 5 minutes to improve performance.</p>
-        <p data-i18n="cors-desc">For CORS support, the worker includes the following headers in all responses:</p>
+        <h2>⚙️ Configuration</h2>
+        <p>This worker automatically balances requests across multiple DNS providers based on the configured weights. All DNS responses are cached for 5 minutes to improve performance.</p>
+        <p>For CORS support, the worker includes the following headers in all responses:</p>
         <div class="code-block">
           Access-Control-Allow-Origin: *<br>
           Access-Control-Allow-Methods: GET, POST, OPTIONS<br>
@@ -694,136 +967,123 @@ function serveLandingPage(request, PROVIDERS) {
       </div>
       
       <footer>
-        <p data-i18n="footer">High-Performance DoH Proxy Worker | Powered by Cloudflare Workers</p>
+        <p>High-Performance DoH Proxy Worker | Powered by Cloudflare Workers</p>
       </footer>
     </div>
     
-    <div class="copy-notification" id="copyNotification" data-i18n="copy-notification">Endpoint URL copied to clipboard!</div>
+    <div class="copy-notification" id="copyNotification">Endpoint URL copied to clipboard!</div>
     
     <script>
-      const translations = {
-        en: {
-          'title': 'High-Performance DoH Proxy',
-          'subtitle': 'A Cloudflare Worker that proxies DNS-over-HTTPS requests with enhanced performance, reliability, and security',
-          'endpoint-title': '🚀 Your DoH Endpoint',
-          'endpoint-desc': 'Use this URL as your DNS-over-HTTPS resolver',
-          'copy-btn': 'Copy Endpoint URL',
-          'feature1-title': 'Lightning Fast',
-          'feature1-desc': "Leverages Cloudflare's global edge network for minimal latency and maximum performance.",
-          'feature2-title': 'Load Balancing',
-          'feature2-desc': 'Intelligently distributes requests across multiple DNS providers based on configurable weights.',
-          'feature3-title': 'Automatic Failover',
-          'feature3-desc': 'Seamlessly switches to backup providers when primary ones experience issues.',
-          'providers-title': '📡 Supported DNS Providers',
-          'providers-desc': 'This proxy supports both general DNS providers and ad-blocking focused providers for enhanced privacy and security.',
-          'provider-adblock': 'Blocks ads, trackers, and malicious domains',
-          'usage-title': '🔧 Usage Examples',
-          'usage-desc': 'Use this worker as a DoH endpoint:',
-          'get-title': 'GET Requests',
-          'get-desc': 'For GET requests, the DNS query must be base64url-encoded as per the <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">RFC 8484 specification</a>:',
-          'encoding-why-title': 'Why base64url encoding?',
-          'encoding-why-list': '<li>DNS queries are binary data that cannot be safely transmitted in URLs</li><li>Base64url encoding converts binary data into a URL-safe string format</li><li>Standard base64 uses characters like \'+\' and \'/\' which have special meaning in URLs</li><li>Base64url replaces these with \'-\' and \'_\' making it URL-safe</li>',
-          'encoding-link': 'Detailed DNS Encoding Explanation',
-          'get-example': 'Example with curl:',
-          'post-title': 'POST Requests',
-          'post-desc': 'For POST requests, the DNS query is sent as binary data in the request body:',
-          'post-example': 'Example with curl:',
-          'post-no-encoding-title': 'Using Without Base64 Encoding',
-          'post-no-encoding-desc': 'To avoid base64 encoding entirely, use POST requests with the <code>Content-Type: application/dns-message</code> header. The DNS query is sent as raw binary data in the request body:',
-          'config-title': '⚙️ Configuration',
-          'config-desc': 'This worker automatically balances requests across multiple DNS providers based on the configured weights. All DNS responses are cached for 5 minutes to improve performance.',
-          'cors-desc': 'For CORS support, the worker includes the following headers in all responses:',
-          'footer': 'High-Performance DoH Proxy Worker | Powered by Cloudflare Workers',
-          'copy-notification': 'Endpoint URL copied to clipboard!'
-        },
-        fa: {
-          'title': 'پروکسی DNS با عملکرد بالا',
-          'subtitle': 'یک Worker کلودفلر که درخواست‌های DNS-over-HTTPS را با عملکرد، قابلیت اطمینان و امنیت بهبود یافته پروکسی می‌کند',
-          'endpoint-title': '🚀 Endpoint DoH شما',
-          'endpoint-desc': 'از این URL به عنوان resolver DNS-over-HTTPS استفاده کنید',
-          'copy-btn': 'کپی کردن URL Endpoint',
-          'feature1-title': 'سریع و قدرتمند',
-          'feature1-desc': 'از شبکه edge جهانی Cloudflare برای حداقل تأخیر و حداکثر عملکرد استفاده می‌کند.',
-          'feature2-title': 'توزیع بار',
-          'feature2-desc': 'درخواست‌ها را به صورت هوشمند بین چندین ارائه‌دهنده DNS بر اساس وزن‌های قابل تنظیم توزیع می‌کند.',
-          'feature3-title': 'Failover خودکار',
-          'feature3-desc': 'هنگامی که ارائه‌دهندگان اصلی با مشکل مواجه می‌شوند، به ارائه‌دهندگان پشتیبان به راحتی سوئیچ می‌کند.',
-          'providers-title': '📡 ارائه‌دهندگان DNS پشتیبانی شده',
-          'providers-desc': 'این پروکسی از ارائه‌دهندگان DNS عمومی و ارائه‌دهندگان متمرکز بر مسدودسازی تبلیغات برای حریم خصوصی و امنیت بیشتر پشتیبانی می‌کند.',
-          'provider-adblock': 'تبلیغات، ردیاب‌ها و دامنه‌های مخرب را مسدود می‌کند',
-          'usage-title': '🔧 نمونه‌های استفاده',
-          'usage-desc': 'از این worker به عنوان endpoint DoH استفاده کنید:',
-          'get-title': 'درخواست‌های GET',
-          'get-desc': 'برای درخواست‌های GET، query DNS باید مطابق با <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">مشخصات RFC 8484</a> به صورت base64url کدگذاری شود:',
-          'encoding-why-title': 'چرا encoding base64url؟',
-          'encoding-why-list': '<li>query های DNS داده‌های باینری هستند که نمی‌توانند به صورت ایمن در URL ها ارسال شوند</li><li>encoding base64url داده‌های باینری را به فرمت رشته‌ای ایمن برای URL تبدیل می‌کند</li><li>base64 استاندارد از کاراکترهایی مانند \'+\' و \'/\' استفاده می‌کند که در URL ها معنی خاصی دارند</li><li>base64url این کاراکترها را با \'-\' و \'_\' جایگزین می‌کند که برای URL ایمن است</li>',
-          'encoding-link': 'توضیح تفصیلی Encoding DNS',
-          'get-example': 'مثال با curl:',
-          'post-title': 'درخواست‌های POST',
-          'post-desc': 'برای درخواست‌های POST، query DNS به عنوان داده باینری در body درخواست ارسال می‌شود:',
-          'post-example': 'مثال با curl:',
-          'post-no-encoding-title': 'استفاده بدون Base64 Encoding',
-          'post-no-encoding-desc': 'برای اجتناب کامل از encoding base64، از درخواست‌های POST با header <code>Content-Type: application/dns-message</code> استفاده کنید. query DNS به عنوان داده باینری خام در body درخواست ارسال می‌شود:',
-          'config-title': '⚙️ پیکربندی',
-          'config-desc': 'این worker به طور خودکار درخواست‌ها را بین چندین ارائه‌دهنده DNS بر اساس وزن‌های پیکربندی شده متعادل می‌کند. تمام پاسخ‌های DNS به مدت 5 دقیقه cache می‌شوند تا عملکرد بهبود یابد.',
-          'cors-desc': 'برای پشتیبانی از CORS، worker header های زیر را در تمام پاسخ‌ها شامل می‌شود:',
-          'footer': 'Worker پروکسی DoH با عملکرد بالا | با قدرت Cloudflare Workers',
-          'copy-notification': 'URL Endpoint در clipboard کپی شد!'
+      // Fixed preferences - always dark theme
+      let currentTheme = 'dark';
+
+      // Initialize theme (always dark)
+      function initTheme() {
+        if (document.documentElement) {
+          document.documentElement.setAttribute('data-theme', 'dark');
         }
-      };
+      }
 
-      let currentLang = localStorage.getItem('language') || 'en';
-
-      function changeLanguage(lang) {
-        currentLang = lang;
-        localStorage.setItem('language', lang);
-        document.documentElement.lang = lang;
-        document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr';
-        document.body.className = lang === 'fa' ? 'rtl' : '';
+      // Typing effect function - simulates terminal typing
+      function typeText(element, text, minSpeed = 30, maxSpeed = 120) {
+        let i = 0;
+        element.textContent = '';
         
-        // Update language buttons
-        document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-        document.getElementById('lang-' + lang).classList.add('active');
-        
-        // Update all elements with data-i18n
-        document.querySelectorAll('[data-i18n]').forEach(element => {
-          const key = element.getAttribute('data-i18n');
-          if (translations[lang][key]) {
-            if (element.tagName === 'UL' || element.tagName === 'OL') {
-              element.innerHTML = translations[lang][key];
+        function type() {
+          if (i < text.length) {
+            const char = text.charAt(i);
+            element.textContent += char;
+            i++;
+            
+            // Variable speed for more realistic typing
+            // Faster for spaces, slower for punctuation
+            let speed = minSpeed;
+            if (char === ' ' || char === '.') {
+              speed = minSpeed + Math.random() * 50;
+            } else if (char === ',' || char === ';' || char === ':') {
+              speed = minSpeed + Math.random() * 100;
             } else {
-              element.innerHTML = translations[lang][key];
+              speed = minSpeed + Math.random() * (maxSpeed - minSpeed);
             }
+            
+            setTimeout(type, speed);
           }
-        });
+        }
+        
+        // Small delay before starting
+        setTimeout(type, 500);
       }
 
       function copyToClipboard() {
         const endpointUrl = document.getElementById('endpointUrl').textContent;
-        navigator.clipboard.writeText(endpointUrl).then(() => {
-          const notification = document.getElementById('copyNotification');
-          notification.classList.add('show');
-          setTimeout(() => {
-            notification.classList.remove('show');
-          }, 3000);
-        }).catch(err => {
-          console.error('Failed to copy: ', err);
-          const msg = currentLang === 'fa' ? 'کپی URL با مشکل مواجه شد. لطفاً به صورت دستی کپی کنید: ' : 'Failed to copy URL to clipboard. Please copy it manually: ';
-          alert(msg + endpointUrl);
-        });
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(endpointUrl).then(() => {
+            const notification = document.getElementById('copyNotification');
+            if (notification) {
+              notification.classList.add('show');
+              setTimeout(() => {
+                notification.classList.remove('show');
+              }, 3000);
+            }
+          }).catch(err => {
+            console.error('Failed to copy: ', err);
+            fallbackCopy(endpointUrl);
+          });
+        } else {
+          fallbackCopy(endpointUrl);
+        }
       }
 
-      // Initialize language on page load
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-          changeLanguage(currentLang);
-        });
-      } else {
-        // DOM already loaded, run immediately
-        setTimeout(function() {
-          changeLanguage(currentLang);
-        }, 0);
+      function fallbackCopy(text) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          const notification = document.getElementById('copyNotification');
+          if (notification) {
+            notification.classList.add('show');
+            setTimeout(() => {
+              notification.classList.remove('show');
+            }, 3000);
+          }
+        } catch (err) {
+          console.error('Fallback copy failed', err);
+          alert('Failed to copy URL to clipboard. Please copy it manually: ' + text);
+        }
+        document.body.removeChild(textArea);
       }
+
+      // Initialize everything when DOM is ready
+      function init() {
+        // Always use dark theme
+        currentTheme = 'dark';
+        
+        // Set theme first (always dark)
+        initTheme();
+        
+        // Start typing effect
+        const typingElement = document.getElementById('typing-text');
+        if (typingElement) {
+          const textToType = 'Hello, good luck, copy this and go to the heart of the internet.';
+          // Typing with variable speed (30-120ms) for realistic terminal effect
+          typeText(typingElement, textToType, 30, 120);
+        }
+      }
+
+      // Wait for DOM to be ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        // DOM is already loaded
+        init();
+      }
+      
+      // Expose copyToClipboard function globally
+      window.copyToClipboard = copyToClipboard;
     </script>
   </body>
   </html>`;

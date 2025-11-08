@@ -25,3 +25,11 @@ Thumbs.db
 .env
 .env.local
 
+# Keep docs directory (for images)
+!docs/
+!docs/*.png
+!docs/*.jpg
+!docs/*.jpeg
+!docs/*.gif
+!docs/*.svg
+
