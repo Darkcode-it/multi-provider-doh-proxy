@@ -8,9 +8,6 @@
     "deploy": "wrangler deploy",
     "test": "echo \"No tests specified\" && exit 0"
   },
-  "dependencies": {
-    "itty-router": "^4.0.23"
-  },
   "devDependencies": {
     "wrangler": "^3.0.0"
   }

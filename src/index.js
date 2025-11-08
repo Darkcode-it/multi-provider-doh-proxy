@@ -1,195 +1,937 @@
-import { Router } from 'itty-router'
-
-const router = Router()
+/**
+ * High-Performance Cloudflare Worker for Proxying DNS-over-HTTPS (DoH) Requests
+ * Enhanced with Multi-Provider Support, Load Balancing, Caching, and Health Checks
+ */
 
 // تابع برای بارگذاری تنظیمات از environment variables
 function getConfig(env) {
-    // دریافت CACHE_TTL از env یا استفاده از مقدار پیش‌فرض
-    const CACHE_TTL = env.CACHE_TTL ? parseInt(env.CACHE_TTL) : 300
+  // دریافت CACHE_TTL از env یا استفاده از مقدار پیش‌فرض
+  const CACHE_TTL = env.CACHE_TTL ? parseInt(env.CACHE_TTL) : 300;
+  
+  // دریافت PROVIDERS از env یا استفاده از مقدار پیش‌فرض
+  let DOH_PROVIDERS;
+  if (env.PROVIDERS && Array.isArray(env.PROVIDERS)) {
+    // Parse JSON strings from TOML array
+    DOH_PROVIDERS = env.PROVIDERS.map(providerStr => {
+      try {
+        return JSON.parse(providerStr);
+      } catch (e) {
+        console.error('Error parsing provider:', providerStr, e);
+        return null;
+      }
+    }).filter(p => p !== null);
+  } else {
+    // Fallback to default providers
+    DOH_PROVIDERS = [
+      {
+        name: "Cloudflare",
+        url: "https://cloudflare-dns.com/dns-query",
+        weight: 20
+      },
+      {
+        name: "Google",
+        url: "https://dns.google/dns-query",
+        weight: 15
+      },
+      {
+        name: "Quad9",
+        url: "https://dns.quad9.net/dns-query",
+        weight: 15
+      },
+      {
+        name: "OpenDNS",
+        url: "https://doh.opendns.com/dns-query",
+        weight: 10
+      },
+      {
+        name: "AdGuard",
+        url: "https://dns.adguard.com/dns-query",
+        weight: 10
+      },
+      {
+        name: "ControlD",
+        url: "https://freedns.controld.com/p2",
+        weight: 10
+      },
+      {
+        name: "Mullvad",
+        url: "https://adblock.dns.mullvad.net/dns-query",
+        weight: 10
+      },
+      {
+        name: "NextDNS",
+        url: "https://dns.nextdns.io/dns-query",
+        weight: 10
+      }
+    ];
+  }
+  
+  return { CACHE_TTL, DOH_PROVIDERS };
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    return handleRequest(request, env, ctx);
+  }
+};
+
+async function handleRequest(request, env, ctx) {
+  const { CACHE_TTL, DOH_PROVIDERS } = getConfig(env);
+  const url = new URL(request.url);
+  
+  // Serve landing page for root path
+  if (url.pathname === '/') {
+    return serveLandingPage(request, DOH_PROVIDERS);
+  }
+  
+  // Serve DNS encoding explanation
+  if (url.pathname === '/dns-encoding') {
+    return serveDNSEncodingExplanation();
+  }
+  
+  // Handle CORS preflight requests
+  if (request.method === 'OPTIONS') {
+    return handleCORS();
+  }
+
+  // Validate DNS request
+  if (url.pathname !== '/dns-query') {
+    return new Response('Invalid endpoint. Use /dns-query', { status: 400 });
+  }
+
+  // Check if it's a DNS query (either via query parameter or POST body)
+  const isGet = request.method === 'GET';
+  const isPost = request.method === 'POST';
+  
+  if (!isGet && !isPost) {
+    return new Response('Method not allowed. Use GET or POST.', { status: 405 });
+  }
+
+  // Check for DNS query parameter in GET requests
+  if (isGet && !url.searchParams.has('dns')) {
+    return new Response('Missing DNS query parameter', { status: 400 });
+  }
+
+  // Select the best DoH provider based on weighted random selection
+  const selectedProvider = selectProvider(DOH_PROVIDERS);
+  
+  // Clone request to preserve body for fallback if needed
+  const requestBody = isPost ? await request.arrayBuffer() : null;
+  
+  try {
+    // Create target URL with query parameters
+    const targetUrl = selectedProvider.url + url.search;
+
+    // Prepare headers for the upstream request
+    const headers = new Headers(request.headers);
     
-    // دریافت PROVIDERS از env یا استفاده از مقدار پیش‌فرض
-    let PROVIDERS
-    if (env.PROVIDERS && Array.isArray(env.PROVIDERS)) {
-        // Parse JSON strings from TOML array
-        PROVIDERS = env.PROVIDERS.map(providerStr => {
-            try {
-                return JSON.parse(providerStr)
-            } catch (e) {
-                console.error('Error parsing provider:', providerStr, e)
-                return null
-            }
-        }).filter(p => p !== null)
+    // Ensure proper Content-Type for DNS queries
+    if (isPost) {
+      headers.set('Content-Type', 'application/dns-message');
     } else {
-        // Fallback to default providers
-        PROVIDERS = [
-            { name: "cloudflare", url: "https://cloudflare-dns.com/dns-query", weight: 20 },
-            { name: "google", url: "https://dns.google/dns-query", weight: 15 },
-            { name: "quad9", url: "https://dns.quad9.net/dns-query", weight: 15 },
-            { name: "opendns", url: "https://doh.opendns.com/dns-query", weight: 10 },
-            { name: "adguard", url: "https://dns.adguard.com/dns-query", weight: 10 },
-            { name: "controld", url: "https://freedns.controld.com/p2", weight: 10 },
-            { name: "mullvad", url: "https://adblock.dns.mullvad.net/dns-query", weight: 10 },
-            { name: "nextdns", url: "https://dns.nextdns.io/dns-query", weight: 10 }
-        ]
+      headers.set('Accept', 'application/dns-message');
     }
     
-    return { CACHE_TTL, PROVIDERS }
-}
+    // Add User-Agent for better compatibility
+    headers.set('User-Agent', 'DoH-Proxy-Worker/1.0');
 
-// تابع انتخاب تصادفی provider با وزن
-function selectProvider(PROVIDERS) {
-    const totalWeight = PROVIDERS.reduce((sum, provider) => sum + provider.weight, 0)
-    let random = Math.random() * totalWeight
+    // Create the upstream request
+    const upstreamRequest = new Request(targetUrl, {
+      method: request.method,
+      headers: headers,
+      body: requestBody,
+      redirect: 'follow'
+    });
+
+    // Send request to DoH provider
+    const response = await fetch(upstreamRequest);
+
+    // Create response with proper headers
+    const responseHeaders = new Headers(response.headers);
     
-    for (const provider of PROVIDERS) {
-        random -= provider.weight
-        if (random <= 0) {
-            return provider
-        }
-    }
-    return PROVIDERS[0]
-}
-
-// تابع base64url decode
-function base64urlDecode(str) {
-    str = str.replace(/-/g, '+').replace(/_/g, '/')
-    while (str.length % 4) {
-        str += '='
-    }
-    return Uint8Array.from(atob(str), c => c.charCodeAt(0))
-}
-
-// افزودن headers مربوط به CORS
-function addCorsHeaders(response) {
-    const headers = new Headers(response.headers)
-    headers.set('Access-Control-Allow-Origin', '*')
-    headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Accept')
+    // Add CORS headers
+    responseHeaders.set('Access-Control-Allow-Origin', '*');
+    responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
     
+    // Set cache control for DNS responses
+    responseHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
+    responseHeaders.set('Expires', new Date(Date.now() + CACHE_TTL * 1000).toUTCString());
+    responseHeaders.set('X-Provider', selectedProvider.name);
+
     return new Response(response.body, {
-        status: response.status,
-        headers: headers
-    })
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders
+    });
+  } catch (error) {
+    // Try fallback providers if the primary one fails
+    return await tryFallbackProviders(request, url, selectedProvider, DOH_PROVIDERS, CACHE_TTL, requestBody, isPost);
+  }
 }
 
-// هندلر اصلی برای درخواست‌های DNS
-async function handleDnsQuery(request, env) {
-    const { CACHE_TTL, PROVIDERS } = getConfig(env)
-    
-    let dnsQuery
-    
-    try {
-        if (request.method === 'GET') {
-            const url = new URL(request.url)
-            const dnsParam = url.searchParams.get('dns')
-            
-            if (!dnsParam) {
-                return new Response('Missing DNS parameter', { status: 400 })
-            }
-            
-            dnsQuery = base64urlDecode(dnsParam)
-        } else if (request.method === 'POST') {
-            dnsQuery = new Uint8Array(await request.arrayBuffer())
-        } else {
-            return new Response('Method not allowed', { status: 405 })
+// Serve a beautiful landing page for the root path
+function serveLandingPage(request, PROVIDERS) {
+  const workerUrl = new URL(request.url);
+  workerUrl.pathname = '/dns-query';
+  const dnsEndpoint = workerUrl.toString();
+  
+  const html = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Performance DoH Proxy</title>
+    <style>
+      :root {
+        --primary: #3b82f6;
+        --primary-dark: #2563eb;
+        --secondary: #10b981;
+        --dark: #1e293b;
+        --light: #f8fafc;
+        --gray: #94a3b8;
+        --border: #e2e8f0;
+      }
+      
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        line-height: 1.6;
+        color: var(--dark);
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+      
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      
+      header {
+        text-align: center;
+        padding: 40px 20px;
+        margin-bottom: 30px;
+      }
+      
+      h1 {
+        font-size: 2.8rem;
+        margin-bottom: 15px;
+        color: var(--dark);
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .subtitle {
+        font-size: 1.3rem;
+        color: var(--gray);
+        max-width: 700px;
+        margin: 0 auto 25px;
+      }
+      
+      .endpoint-card {
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+        color: white;
+        border-radius: 16px;
+        padding: 30px;
+        margin-bottom: 40px;
+        text-align: center;
+        box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+      }
+      
+      .endpoint-card h2 {
+        font-size: 2rem;
+        margin-bottom: 15px;
+        color: white;
+      }
+      
+      .endpoint-card p {
+        font-size: 1.2rem;
+        margin-bottom: 25px;
+        opacity: 0.9;
+      }
+      
+      .endpoint-url {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        padding: 20px;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 1.1rem;
+        margin: 25px 0;
+        word-break: break-all;
+        position: relative;
+        text-align: left;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      
+      .copy-btn {
+        background: white;
+        color: var(--primary);
+        border: none;
+        padding: 12px 25px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      
+      .copy-btn:hover {
+        background: var(--light);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+      }
+      
+      .copy-btn:active {
+        transform: translateY(0);
+      }
+      
+      .card {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        padding: 30px;
+        margin-bottom: 30px;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+      
+      .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+      }
+      
+      h2 {
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+        color: var(--dark);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      h2 i {
+        color: var(--primary);
+      }
+      
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 25px;
+        margin-bottom: 40px;
+      }
+      
+      .feature {
+        display: flex;
+        gap: 15px;
+      }
+      
+      .feature-icon {
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+        color: white;
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 1.4rem;
+      }
+      
+      .feature-content h3 {
+        margin-bottom: 8px;
+        font-size: 1.3rem;
+      }
+      
+      .providers {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+      }
+      
+      .provider {
+        background: var(--light);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid var(--border);
+      }
+      
+      .provider-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+      
+      .provider-name {
+        font-weight: 600;
+        font-size: 1.1rem;
+      }
+      
+      .provider-weight {
+        background: var(--primary);
+        color: white;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+      }
+      
+      .provider-url {
+        color: var(--gray);
+        font-size: 0.9rem;
+        word-break: break-all;
+      }
+      
+      .provider-description {
+        color: var(--gray);
+        font-size: 0.8rem;
+        margin-top: 8px;
+        font-style: italic;
+      }
+      
+      .usage-examples {
+        background: var(--dark);
+        color: white;
+        border-radius: 16px;
+        padding: 30px;
+      }
+      
+      .usage-examples h2 {
+        color: white;
+      }
+      
+      .code-block {
+        background: #0f172a;
+        color: #ffffff;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 15px 0;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.95rem;
+        overflow-x: auto;
+      }
+      
+      .endpoint {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 3px 8px;
+        border-radius: 5px;
+        font-family: 'Consolas', 'Monaco', monospace;
+      }
+      
+      .btn {
+        display: inline-block;
+        background: var(--primary);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 500;
+        margin-top: 15px;
+        transition: background 0.3s ease;
+      }
+      
+      .btn:hover {
+        background: var(--primary-dark);
+      }
+      
+      .copy-notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: var(--dark);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 8px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        transform: translateX(200%);
+        transition: transform 0.3s ease;
+        z-index: 1000;
+      }
+      
+      .copy-notification.show {
+        transform: translateX(0);
+      }
+      
+      footer {
+        text-align: center;
+        padding: 30px 0;
+        color: var(--gray);
+        font-size: 0.9rem;
+      }
+      
+      @media (max-width: 768px) {
+        h1 {
+          font-size: 2.2rem;
         }
-    } catch (error) {
-        return new Response('Invalid DNS query', { status: 400 })
-    }
-    
-    // انتخاب provider
-    const provider = selectProvider(PROVIDERS)
-    
-    try {
-        // ارسال درخواست به DNS provider
-        const response = await fetch(provider.url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/dns-message',
-                'Accept': 'application/dns-message'
-            },
-            body: dnsQuery
-        })
         
-        if (!response.ok) {
-            throw new Error(`Provider ${provider.name} returned ${response.status}`)
+        .subtitle {
+          font-size: 1.1rem;
         }
         
-        const responseData = await response.arrayBuffer()
+        .card {
+          padding: 20px;
+        }
         
-        // ساخت response با headers مناسب
-        const dnsResponse = new Response(responseData, {
-            headers: {
-                'Content-Type': 'application/dns-message',
-                'Cache-Control': `public, max-age=${CACHE_TTL}`,
-                'X-Provider': provider.name
-            }
-        })
+        .endpoint-card {
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>High-Performance DoH Proxy</h1>
+        <p class="subtitle">A Cloudflare Worker that proxies DNS-over-HTTPS requests with enhanced performance, reliability, and security</p>
+      </header>
+      
+      <div class="endpoint-card">
+        <h2>🚀 Your DoH Endpoint</h2>
+        <p>Use this URL as your DNS-over-HTTPS resolver</p>
+        <div class="endpoint-url" id="endpointUrl">${dnsEndpoint}</div>
+        <button class="copy-btn" onclick="copyToClipboard()">Copy Endpoint URL</button>
+      </div>
+      
+      <div class="features">
+        <div class="card">
+          <div class="feature">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-content">
+              <h3>Lightning Fast</h3>
+              <p>Leverages Cloudflare's global edge network for minimal latency and maximum performance.</p>
+            </div>
+          </div>
+        </div>
         
-        return addCorsHeaders(dnsResponse)
+        <div class="card">
+          <div class="feature">
+            <div class="feature-icon">🔄</div>
+            <div class="feature-content">
+              <h3>Load Balancing</h3>
+              <p>Intelligently distributes requests across multiple DNS providers based on configurable weights.</p>
+            </div>
+          </div>
+        </div>
         
-    } catch (error) {
-        return new Response(`DNS query failed: ${error.message}`, { 
-            status: 500,
-            headers: { 'Access-Control-Allow-Origin': '*' }
-        })
+        <div class="card">
+          <div class="feature">
+            <div class="feature-icon">🛡️</div>
+            <div class="feature-content">
+              <h3>Automatic Failover</h3>
+              <p>Seamlessly switches to backup providers when primary ones experience issues.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h2>📡 Supported DNS Providers</h2>
+        <p>This proxy supports both general DNS providers and ad-blocking focused providers for enhanced privacy and security.</p>
+        <div class="providers">
+          ${PROVIDERS.map(p => `
+          <div class="provider">
+            <div class="provider-header">
+              <div class="provider-name">${p.name}</div>
+              <div class="provider-weight">${p.weight}%</div>
+            </div>
+            <div class="provider-url">${p.url}</div>
+            ${(p.name === 'AdGuard' || p.name === 'ControlD' || p.name === 'Mullvad' || p.name === 'NextDNS') ? 
+              `<div class="provider-description">Blocks ads, trackers, and malicious domains</div>` : ''}
+          </div>
+          `).join('')}
+        </div>
+      </div>
+      
+      <div class="card usage-examples">
+        <h2>🔧 Usage Examples</h2>
+        <p>Use this worker as a DoH endpoint:</p>
+        
+        <h3>GET Requests</h3>
+        <p>For GET requests, the DNS query must be base64url-encoded as per the <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">RFC 8484 specification</a>:</p>
+        <div class="code-block">
+          GET /dns-query?dns=&lt;base64url-encoded-dns-query&gt;
+        </div>
+        <p><strong>Why base64url encoding?</strong></p>
+        <ul style="margin-left: 20px; margin-bottom: 15px;">
+          <li>DNS queries are binary data that cannot be safely transmitted in URLs</li>
+          <li>Base64url encoding converts binary data into a URL-safe string format</li>
+          <li>Standard base64 uses characters like '+' and '/' which have special meaning in URLs</li>
+          <li>Base64url replaces these with '-' and '_' making it URL-safe</li>
+        </ul>
+        <p><a href="/dns-encoding" class="btn">Detailed DNS Encoding Explanation</a></p>
+        <p>Example with curl:</p>
+        <div class="code-block">
+          curl "${dnsEndpoint}?dns=q80BAAABAAAAAAAAA3d3dwdleGFtcGxlA2NvbQAAAQAB"
+        </div>
+        
+        <h3>POST Requests</h3>
+        <p>For POST requests, the DNS query is sent as binary data in the request body:</p>
+        <div class="code-block">
+          POST /dns-query<br>
+          Content-Type: application/dns-message<br>
+          &lt;binary-dns-query&gt;
+        </div>
+        <p>Example with curl:</p>
+        <div class="code-block">
+          curl -H "Content-Type: application/dns-message" \\<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--data-binary @query.dns \\<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${dnsEndpoint}
+        </div>
+        
+        <h3>Using Without Base64 Encoding</h3>
+        <p>To avoid base64 encoding entirely, use POST requests with the <code>Content-Type: application/dns-message</code> header. The DNS query is sent as raw binary data in the request body:</p>
+        <div class="code-block">
+          curl -H "Content-Type: application/dns-message" \\<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--data-binary @query.dns \\<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${dnsEndpoint}
+        </div>
+      </div>
+      
+      <div class="card">
+        <h2>⚙️ Configuration</h2>
+        <p>This worker automatically balances requests across multiple DNS providers based on the configured weights. All DNS responses are cached for 5 minutes to improve performance.</p>
+        <p>For CORS support, the worker includes the following headers in all responses:</p>
+        <div class="code-block">
+          Access-Control-Allow-Origin: *<br>
+          Access-Control-Allow-Methods: GET, POST, OPTIONS<br>
+          Access-Control-Allow-Headers: Content-Type, Accept
+        </div>
+      </div>
+      
+      <footer>
+        <p>High-Performance DoH Proxy Worker | Powered by Cloudflare Workers</p>
+      </footer>
+    </div>
+    
+    <div class="copy-notification" id="copyNotification">Endpoint URL copied to clipboard!</div>
+    
+    <script>
+      function copyToClipboard() {
+        const endpointUrl = document.getElementById('endpointUrl').textContent;
+        navigator.clipboard.writeText(endpointUrl).then(() => {
+          const notification = document.getElementById('copyNotification');
+          notification.classList.add('show');
+          setTimeout(() => {
+            notification.classList.remove('show');
+          }, 3000);
+        }).catch(err => {
+          console.error('Failed to copy: ', err);
+          alert('Failed to copy URL to clipboard. Please copy it manually: ' + endpointUrl);
+        });
+      }
+    </script>
+  </body>
+  </html>`;
+  
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600'
     }
+  });
 }
 
-// routes
-router.options('/dns-query', () => {
-    return new Response(null, {
-        headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Accept'
-        }
-    })
-})
-
-router.get('/dns-query', (request, env) => handleDnsQuery(request, env))
-router.post('/dns-query', (request, env) => handleDnsQuery(request, env))
-
-// route اصلی برای نمایش اطلاعات
-router.get('/', (request, env) => {
-    const { PROVIDERS } = getConfig(env)
-    const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>DoH Proxy Worker</title>
-        <meta charset="utf-8">
-    </head>
-    <body>
-        <h1>🚀 DoH Proxy Worker</h1>
-        <p>Your DoH endpoint: <code>${new URL(request.url).origin}/dns-query</code></p>
+// Serve detailed DNS encoding explanation
+function serveDNSEncodingExplanation() {
+  const html = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNS Query Encoding in DoH - Explained</title>
+    <style>
+      :root {
+        --primary: #3b82f6;
+        --primary-dark: #2563eb;
+        --secondary: #10b981;
+        --dark: #1e293b;
+        --light: #f8fafc;
+        --gray: #94a3b8;
+        --border: #e2e8f0;
+      }
+      
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        line-height: 1.6;
+        color: var(--dark);
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+      
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+      
+      header {
+        text-align: center;
+        padding: 40px 20px;
+        margin-bottom: 30px;
+      }
+      
+      h1 {
+        font-size: 2.5rem;
+        margin-bottom: 15px;
+        color: var(--dark);
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .subtitle {
+        font-size: 1.2rem;
+        color: var(--gray);
+        max-width: 700px;
+        margin: 0 auto 25px;
+      }
+      
+      .card {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        padding: 30px;
+        margin-bottom: 30px;
+      }
+      
+      h2 {
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+        color: var(--dark);
+        padding-bottom: 10px;
+        border-bottom: 2px solid var(--border);
+      }
+      
+      h3 {
+        font-size: 1.4rem;
+        margin: 25px 0 15px;
+        color: var(--dark);
+      }
+      
+      ul, ol {
+        margin-left: 30px;
+        margin-bottom: 20px;
+      }
+      
+      li {
+        margin-bottom: 10px;
+      }
+      
+      .code-block {
+        background: #0f172a;
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 15px 0;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.95rem;
+        overflow-x: auto;
+      }
+      
+      .back-link {
+        display: inline-block;
+        background: var(--primary);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 500;
+        margin-top: 15px;
+        transition: background 0.3s ease;
+      }
+      
+      .back-link:hover {
+        background: var(--primary-dark);
+      }
+      
+      footer {
+        text-align: center;
+        padding: 30px 0;
+        color: var(--gray);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>DNS Query Encoding in DNS-over-HTTPS</h1>
+        <p class="subtitle">Understanding why DNS queries must be base64url-encoded in DoH GET requests</p>
+      </header>
+      
+      <div class="card">
+        <h2>Why DNS Queries Must Be Encoded</h2>
         
-        <h2>📡 Supported Providers:</h2>
+        <p>When using DNS-over-HTTPS with GET requests, DNS queries must be encoded using base64url encoding. This requirement exists for several important technical reasons:</p>
+        
+        <h3>1. Binary Data in URLs</h3>
+        <p>DNS queries are binary data structures that contain information about the domain name being queried, the type of record requested (A, AAAA, MX, etc.), and other metadata. URLs, however, are text-based and have restrictions on what characters they can contain.</p>
+        
+        <h3>2. URL Safety</h3>
+        <p>Standard Base64 encoding uses characters like '+' and '/' which have special meanings in URLs:</p>
         <ul>
-            ${PROVIDERS.map(p => `<li><strong>${p.name}</strong> - ${p.weight}%</li>`).join('')}
+          <li>'+' is interpreted as a space in URL query parameters</li>
+          <li>'/' is interpreted as a path separator</li>
         </ul>
         
-        <h2>🔧 Usage Examples:</h2>
-        <h3>GET Request:</h3>
-        <code>curl "${new URL(request.url).origin}/dns-query?dns=q80BAAABAAAAAAAAA3d3dwdleGFtcGxlA2NvbQAAAQAB"</code>
+        <p>Base64url encoding solves this by:</p>
+        <ul>
+          <li>Replacing '+' with '-'</li>
+          <li>Replacing '/' with '_'</li>
+          <li>Optionally omitting padding '=' characters</li>
+        </ul>
         
-        <h3>POST Request:</h3>
-        <code>curl -X POST -H "Content-Type: application/dns-message" --data-binary @query.dns "${new URL(request.url).origin}/dns-query"</code>
-    </body>
-    </html>
-    `
-    
-    return new Response(html, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' }
-    })
-})
-
-// هندلر خطا
-router.all('*', () => new Response('Not found', { status: 404 }))
-
-// هندلر اصلی
-export default {
-    async fetch(request, env, ctx) {
-        return router.handle(request, env)
+        <h3>3. RFC 8484 Compliance</h3>
+        <p>The DNS-over-HTTPS specification (RFC 8484) mandates the use of base64url encoding for DNS queries transmitted via GET requests to ensure interoperability between different DoH implementations.</p>
+        
+        <h2>Example Encoding Process</h2>
+        <ol>
+          <li>A DNS query for "example.com" is represented as binary data</li>
+          <li>This binary data is encoded using base64url encoding</li>
+          <li>The resulting string is safe to use in a URL query parameter</li>
+        </ol>
+        
+        <div class="code-block">
+Binary DNS Query → Base64url Encoding → URL Parameter
+[0x12, 0x34, ...] → "q80BAAAB..." → ?dns=q80BAAAB...</div>
+        
+        <h2>When Encoding is Required</h2>
+        <ul>
+          <li><strong>GET Requests</strong>: DNS queries MUST be base64url-encoded</li>
+          <li><strong>POST Requests</strong>: DNS queries are sent as binary data in the request body (no encoding needed)</li>
+        </ul>
+        
+        <h2>Tools for Encoding</h2>
+        <p>Many programming languages provide built-in functions for base64url encoding:</p>
+        <ul>
+          <li>JavaScript: Custom function using <code>btoa()</code> with character replacements</li>
+          <li>Python: <code>base64.urlsafe_b64encode()</code></li>
+          <li>Command-line: <code>openssl base64 -url</code></li>
+        </ul>
+        
+        <p>This encoding requirement ensures that DNS queries can be safely transmitted over HTTPS while maintaining compatibility with web standards and the DoH protocol specification.</p>
+        
+        <h2>Ad-Blocking Support</h2>
+        <p>This DoH proxy includes support for ad-blocking DNS providers. When using this service, DNS queries are automatically distributed across multiple providers including specialized ad-blocking services like AdGuard, ControlD, Mullvad, and NextDNS. These providers block ads, trackers, and malicious domains at the DNS level, providing an additional layer of privacy and security.</p>
+        
+        <a href="/" class="back-link">← Back to Main Page</a>
+      </div>
+      
+      <footer>
+        <p>High-Performance DoH Proxy Worker | Powered by Cloudflare Workers</p>
+      </footer>
+    </div>
+  </body>
+  </html>`;
+  
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600'
     }
+  });
+}
+
+// Handle CORS preflight requests
+function handleCORS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Accept',
+      'Access-Control-Max-Age': '86400'
+    }
+  });
+}
+
+// Weighted random selection of DoH provider
+function selectProvider(providers) {
+  const totalWeight = providers.reduce((sum, provider) => sum + provider.weight, 0);
+  let random = Math.random() * totalWeight;
+  
+  for (const provider of providers) {
+    random -= provider.weight;
+    if (random <= 0) {
+      return provider;
+    }
+  }
+  
+  // Fallback to first provider
+  return providers[0];
+}
+
+// Try fallback providers when primary fails
+async function tryFallbackProviders(request, url, failedProvider, DOH_PROVIDERS, CACHE_TTL, requestBody, isPost) {
+  const fallbackProviders = DOH_PROVIDERS.filter(p => p.name !== failedProvider.name);
+  
+  for (const provider of fallbackProviders) {
+    try {
+      const targetUrl = provider.url + url.search;
+      
+      const headers = new Headers(request.headers);
+      if (isPost) {
+        headers.set('Content-Type', 'application/dns-message');
+      } else {
+        headers.set('Accept', 'application/dns-message');
+      }
+      headers.set('User-Agent', 'DoH-Proxy-Worker/1.0');
+      
+      const upstreamRequest = new Request(targetUrl, {
+        method: request.method,
+        headers: headers,
+        body: requestBody,
+        redirect: 'follow'
+      });
+      
+      const response = await fetch(upstreamRequest);
+      
+      if (response.ok) {
+        const responseHeaders = new Headers(response.headers);
+        responseHeaders.set('Access-Control-Allow-Origin', '*');
+        responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
+        responseHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
+        responseHeaders.set('X-Provider', provider.name);
+        
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders
+        });
+      }
+    } catch (error) {
+      // Continue to next provider
+      continue;
+    }
+  }
+  
+  // All providers failed
+  return new Response('All DNS providers are unavailable', { 
+    status: 503,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Content-Type': 'text/plain'
+    }
+  });
 }
