@@ -178,11 +178,11 @@ function serveLandingPage(request, PROVIDERS) {
   
   const html = `
   <!DOCTYPE html>
-  <html lang="en">
+  <html lang="en" dir="ltr">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>High-Performance DoH Proxy</title>
+    <title>High-Performance DoH Proxy | پروکسی DNS با عملکرد بالا</title>
     <style>
       :root {
         --primary: #3b82f6;
@@ -201,17 +201,74 @@ function serveLandingPage(request, PROVIDERS) {
       }
       
       body {
-        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        font-family: 'Segoe UI', system-ui, -apple-system, 'Tahoma', 'Arial', sans-serif;
         line-height: 1.6;
         color: var(--dark);
         background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
         min-height: 100vh;
         padding: 20px;
+        transition: all 0.3s ease;
+      }
+      
+      body.rtl {
+        direction: rtl;
+        font-family: 'Segoe UI', system-ui, -apple-system, 'Tahoma', 'Arial', sans-serif;
+      }
+      
+      .encoding-list {
+        margin-left: 20px;
+        margin-bottom: 15px;
+      }
+      
+      body.rtl .encoding-list {
+        margin-left: 0;
+        margin-right: 20px;
       }
       
       .container {
         max-width: 1200px;
         margin: 0 auto;
+      }
+      
+      .language-selector {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1001;
+        display: flex;
+        gap: 10px;
+        background: white;
+        padding: 8px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      
+      .lang-btn {
+        padding: 8px 16px;
+        border: 2px solid var(--border);
+        background: white;
+        color: var(--dark);
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        font-size: 0.9rem;
+      }
+      
+      .lang-btn:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+      }
+      
+      .lang-btn.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+      }
+      
+      body.rtl .language-selector {
+        right: auto;
+        left: 20px;
       }
       
       header {
@@ -460,7 +517,17 @@ function serveLandingPage(request, PROVIDERS) {
         z-index: 1000;
       }
       
+      body.rtl .copy-notification {
+        right: auto;
+        left: 20px;
+        transform: translateX(-200%);
+      }
+      
       .copy-notification.show {
+        transform: translateX(0);
+      }
+      
+      body.rtl .copy-notification.show {
         transform: translateX(0);
       }
       
@@ -487,21 +554,37 @@ function serveLandingPage(request, PROVIDERS) {
         .endpoint-card {
           padding: 20px;
         }
+        
+        .language-selector {
+          top: 10px;
+          right: 10px;
+          padding: 6px;
+        }
+        
+        body.rtl .language-selector {
+          right: auto;
+          left: 10px;
+        }
       }
     </style>
   </head>
   <body>
+    <div class="language-selector">
+      <button class="lang-btn active" onclick="changeLanguage('en')" id="lang-en">English</button>
+      <button class="lang-btn" onclick="changeLanguage('fa')" id="lang-fa">فارسی</button>
+    </div>
+    
     <div class="container">
       <header>
-        <h1>High-Performance DoH Proxy</h1>
-        <p class="subtitle">A Cloudflare Worker that proxies DNS-over-HTTPS requests with enhanced performance, reliability, and security</p>
+        <h1 data-i18n="title">High-Performance DoH Proxy</h1>
+        <p class="subtitle" data-i18n="subtitle">A Cloudflare Worker that proxies DNS-over-HTTPS requests with enhanced performance, reliability, and security</p>
       </header>
       
       <div class="endpoint-card">
-        <h2>🚀 Your DoH Endpoint</h2>
-        <p>Use this URL as your DNS-over-HTTPS resolver</p>
+        <h2 data-i18n="endpoint-title">🚀 Your DoH Endpoint</h2>
+        <p data-i18n="endpoint-desc">Use this URL as your DNS-over-HTTPS resolver</p>
         <div class="endpoint-url" id="endpointUrl">${dnsEndpoint}</div>
-        <button class="copy-btn" onclick="copyToClipboard()">Copy Endpoint URL</button>
+        <button class="copy-btn" onclick="copyToClipboard()" data-i18n="copy-btn">Copy Endpoint URL</button>
       </div>
       
       <div class="features">
@@ -509,8 +592,8 @@ function serveLandingPage(request, PROVIDERS) {
           <div class="feature">
             <div class="feature-icon">⚡</div>
             <div class="feature-content">
-              <h3>Lightning Fast</h3>
-              <p>Leverages Cloudflare's global edge network for minimal latency and maximum performance.</p>
+              <h3 data-i18n="feature1-title">Lightning Fast</h3>
+              <p data-i18n="feature1-desc">Leverages Cloudflare's global edge network for minimal latency and maximum performance.</p>
             </div>
           </div>
         </div>
@@ -519,8 +602,8 @@ function serveLandingPage(request, PROVIDERS) {
           <div class="feature">
             <div class="feature-icon">🔄</div>
             <div class="feature-content">
-              <h3>Load Balancing</h3>
-              <p>Intelligently distributes requests across multiple DNS providers based on configurable weights.</p>
+              <h3 data-i18n="feature2-title">Load Balancing</h3>
+              <p data-i18n="feature2-desc">Intelligently distributes requests across multiple DNS providers based on configurable weights.</p>
             </div>
           </div>
         </div>
@@ -529,16 +612,16 @@ function serveLandingPage(request, PROVIDERS) {
           <div class="feature">
             <div class="feature-icon">🛡️</div>
             <div class="feature-content">
-              <h3>Automatic Failover</h3>
-              <p>Seamlessly switches to backup providers when primary ones experience issues.</p>
+              <h3 data-i18n="feature3-title">Automatic Failover</h3>
+              <p data-i18n="feature3-desc">Seamlessly switches to backup providers when primary ones experience issues.</p>
             </div>
           </div>
         </div>
       </div>
       
       <div class="card">
-        <h2>📡 Supported DNS Providers</h2>
-        <p>This proxy supports both general DNS providers and ad-blocking focused providers for enhanced privacy and security.</p>
+        <h2 data-i18n="providers-title">📡 Supported DNS Providers</h2>
+        <p data-i18n="providers-desc">This proxy supports both general DNS providers and ad-blocking focused providers for enhanced privacy and security.</p>
         <div class="providers">
           ${PROVIDERS.map(p => `
           <div class="provider">
@@ -548,50 +631,50 @@ function serveLandingPage(request, PROVIDERS) {
             </div>
             <div class="provider-url">${p.url}</div>
             ${(p.name === 'AdGuard' || p.name === 'ControlD' || p.name === 'Mullvad' || p.name === 'NextDNS') ? 
-              `<div class="provider-description">Blocks ads, trackers, and malicious domains</div>` : ''}
+              `<div class="provider-description" data-i18n="provider-adblock">Blocks ads, trackers, and malicious domains</div>` : ''}
           </div>
           `).join('')}
         </div>
       </div>
       
       <div class="card usage-examples">
-        <h2>🔧 Usage Examples</h2>
-        <p>Use this worker as a DoH endpoint:</p>
+        <h2 data-i18n="usage-title">🔧 Usage Examples</h2>
+        <p data-i18n="usage-desc">Use this worker as a DoH endpoint:</p>
         
-        <h3>GET Requests</h3>
-        <p>For GET requests, the DNS query must be base64url-encoded as per the <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">RFC 8484 specification</a>:</p>
+        <h3 data-i18n="get-title">GET Requests</h3>
+        <p data-i18n="get-desc">For GET requests, the DNS query must be base64url-encoded as per the <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">RFC 8484 specification</a>:</p>
         <div class="code-block">
           GET /dns-query?dns=&lt;base64url-encoded-dns-query&gt;
         </div>
-        <p><strong>Why base64url encoding?</strong></p>
-        <ul style="margin-left: 20px; margin-bottom: 15px;">
+        <p><strong data-i18n="encoding-why-title">Why base64url encoding?</strong></p>
+        <ul class="encoding-list" data-i18n="encoding-why-list">
           <li>DNS queries are binary data that cannot be safely transmitted in URLs</li>
           <li>Base64url encoding converts binary data into a URL-safe string format</li>
           <li>Standard base64 uses characters like '+' and '/' which have special meaning in URLs</li>
           <li>Base64url replaces these with '-' and '_' making it URL-safe</li>
         </ul>
-        <p><a href="/dns-encoding" class="btn">Detailed DNS Encoding Explanation</a></p>
-        <p>Example with curl:</p>
+        <p><a href="/dns-encoding" class="btn" data-i18n="encoding-link">Detailed DNS Encoding Explanation</a></p>
+        <p data-i18n="get-example">Example with curl:</p>
         <div class="code-block">
           curl "${dnsEndpoint}?dns=q80BAAABAAAAAAAAA3d3dwdleGFtcGxlA2NvbQAAAQAB"
         </div>
         
-        <h3>POST Requests</h3>
-        <p>For POST requests, the DNS query is sent as binary data in the request body:</p>
+        <h3 data-i18n="post-title">POST Requests</h3>
+        <p data-i18n="post-desc">For POST requests, the DNS query is sent as binary data in the request body:</p>
         <div class="code-block">
           POST /dns-query<br>
           Content-Type: application/dns-message<br>
           &lt;binary-dns-query&gt;
         </div>
-        <p>Example with curl:</p>
+        <p data-i18n="post-example">Example with curl:</p>
         <div class="code-block">
           curl -H "Content-Type: application/dns-message" \\<br>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--data-binary @query.dns \\<br>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${dnsEndpoint}
         </div>
         
-        <h3>Using Without Base64 Encoding</h3>
-        <p>To avoid base64 encoding entirely, use POST requests with the <code>Content-Type: application/dns-message</code> header. The DNS query is sent as raw binary data in the request body:</p>
+        <h3 data-i18n="post-no-encoding-title">Using Without Base64 Encoding</h3>
+        <p data-i18n="post-no-encoding-desc">To avoid base64 encoding entirely, use POST requests with the <code>Content-Type: application/dns-message</code> header. The DNS query is sent as raw binary data in the request body:</p>
         <div class="code-block">
           curl -H "Content-Type: application/dns-message" \\<br>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--data-binary @query.dns \\<br>
@@ -600,9 +683,9 @@ function serveLandingPage(request, PROVIDERS) {
       </div>
       
       <div class="card">
-        <h2>⚙️ Configuration</h2>
-        <p>This worker automatically balances requests across multiple DNS providers based on the configured weights. All DNS responses are cached for 5 minutes to improve performance.</p>
-        <p>For CORS support, the worker includes the following headers in all responses:</p>
+        <h2 data-i18n="config-title">⚙️ Configuration</h2>
+        <p data-i18n="config-desc">This worker automatically balances requests across multiple DNS providers based on the configured weights. All DNS responses are cached for 5 minutes to improve performance.</p>
+        <p data-i18n="cors-desc">For CORS support, the worker includes the following headers in all responses:</p>
         <div class="code-block">
           Access-Control-Allow-Origin: *<br>
           Access-Control-Allow-Methods: GET, POST, OPTIONS<br>
@@ -611,13 +694,110 @@ function serveLandingPage(request, PROVIDERS) {
       </div>
       
       <footer>
-        <p>High-Performance DoH Proxy Worker | Powered by Cloudflare Workers</p>
+        <p data-i18n="footer">High-Performance DoH Proxy Worker | Powered by Cloudflare Workers</p>
       </footer>
     </div>
     
-    <div class="copy-notification" id="copyNotification">Endpoint URL copied to clipboard!</div>
+    <div class="copy-notification" id="copyNotification" data-i18n="copy-notification">Endpoint URL copied to clipboard!</div>
     
     <script>
+      const translations = {
+        en: {
+          'title': 'High-Performance DoH Proxy',
+          'subtitle': 'A Cloudflare Worker that proxies DNS-over-HTTPS requests with enhanced performance, reliability, and security',
+          'endpoint-title': '🚀 Your DoH Endpoint',
+          'endpoint-desc': 'Use this URL as your DNS-over-HTTPS resolver',
+          'copy-btn': 'Copy Endpoint URL',
+          'feature1-title': 'Lightning Fast',
+          'feature1-desc': "Leverages Cloudflare's global edge network for minimal latency and maximum performance.",
+          'feature2-title': 'Load Balancing',
+          'feature2-desc': 'Intelligently distributes requests across multiple DNS providers based on configurable weights.',
+          'feature3-title': 'Automatic Failover',
+          'feature3-desc': 'Seamlessly switches to backup providers when primary ones experience issues.',
+          'providers-title': '📡 Supported DNS Providers',
+          'providers-desc': 'This proxy supports both general DNS providers and ad-blocking focused providers for enhanced privacy and security.',
+          'provider-adblock': 'Blocks ads, trackers, and malicious domains',
+          'usage-title': '🔧 Usage Examples',
+          'usage-desc': 'Use this worker as a DoH endpoint:',
+          'get-title': 'GET Requests',
+          'get-desc': 'For GET requests, the DNS query must be base64url-encoded as per the <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">RFC 8484 specification</a>:',
+          'encoding-why-title': 'Why base64url encoding?',
+          'encoding-why-list': '<li>DNS queries are binary data that cannot be safely transmitted in URLs</li><li>Base64url encoding converts binary data into a URL-safe string format</li><li>Standard base64 uses characters like \'+\' and \'/\' which have special meaning in URLs</li><li>Base64url replaces these with \'-\' and \'_\' making it URL-safe</li>',
+          'encoding-link': 'Detailed DNS Encoding Explanation',
+          'get-example': 'Example with curl:',
+          'post-title': 'POST Requests',
+          'post-desc': 'For POST requests, the DNS query is sent as binary data in the request body:',
+          'post-example': 'Example with curl:',
+          'post-no-encoding-title': 'Using Without Base64 Encoding',
+          'post-no-encoding-desc': 'To avoid base64 encoding entirely, use POST requests with the <code>Content-Type: application/dns-message</code> header. The DNS query is sent as raw binary data in the request body:',
+          'config-title': '⚙️ Configuration',
+          'config-desc': 'This worker automatically balances requests across multiple DNS providers based on the configured weights. All DNS responses are cached for 5 minutes to improve performance.',
+          'cors-desc': 'For CORS support, the worker includes the following headers in all responses:',
+          'footer': 'High-Performance DoH Proxy Worker | Powered by Cloudflare Workers',
+          'copy-notification': 'Endpoint URL copied to clipboard!'
+        },
+        fa: {
+          'title': 'پروکسی DNS با عملکرد بالا',
+          'subtitle': 'یک Worker کلودفلر که درخواست‌های DNS-over-HTTPS را با عملکرد، قابلیت اطمینان و امنیت بهبود یافته پروکسی می‌کند',
+          'endpoint-title': '🚀 Endpoint DoH شما',
+          'endpoint-desc': 'از این URL به عنوان resolver DNS-over-HTTPS استفاده کنید',
+          'copy-btn': 'کپی کردن URL Endpoint',
+          'feature1-title': 'سریع و قدرتمند',
+          'feature1-desc': 'از شبکه edge جهانی Cloudflare برای حداقل تأخیر و حداکثر عملکرد استفاده می‌کند.',
+          'feature2-title': 'توزیع بار',
+          'feature2-desc': 'درخواست‌ها را به صورت هوشمند بین چندین ارائه‌دهنده DNS بر اساس وزن‌های قابل تنظیم توزیع می‌کند.',
+          'feature3-title': 'Failover خودکار',
+          'feature3-desc': 'هنگامی که ارائه‌دهندگان اصلی با مشکل مواجه می‌شوند، به ارائه‌دهندگان پشتیبان به راحتی سوئیچ می‌کند.',
+          'providers-title': '📡 ارائه‌دهندگان DNS پشتیبانی شده',
+          'providers-desc': 'این پروکسی از ارائه‌دهندگان DNS عمومی و ارائه‌دهندگان متمرکز بر مسدودسازی تبلیغات برای حریم خصوصی و امنیت بیشتر پشتیبانی می‌کند.',
+          'provider-adblock': 'تبلیغات، ردیاب‌ها و دامنه‌های مخرب را مسدود می‌کند',
+          'usage-title': '🔧 نمونه‌های استفاده',
+          'usage-desc': 'از این worker به عنوان endpoint DoH استفاده کنید:',
+          'get-title': 'درخواست‌های GET',
+          'get-desc': 'برای درخواست‌های GET، query DNS باید مطابق با <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">مشخصات RFC 8484</a> به صورت base64url کدگذاری شود:',
+          'encoding-why-title': 'چرا encoding base64url؟',
+          'encoding-why-list': '<li>query های DNS داده‌های باینری هستند که نمی‌توانند به صورت ایمن در URL ها ارسال شوند</li><li>encoding base64url داده‌های باینری را به فرمت رشته‌ای ایمن برای URL تبدیل می‌کند</li><li>base64 استاندارد از کاراکترهایی مانند \'+\' و \'/\' استفاده می‌کند که در URL ها معنی خاصی دارند</li><li>base64url این کاراکترها را با \'-\' و \'_\' جایگزین می‌کند که برای URL ایمن است</li>',
+          'encoding-link': 'توضیح تفصیلی Encoding DNS',
+          'get-example': 'مثال با curl:',
+          'post-title': 'درخواست‌های POST',
+          'post-desc': 'برای درخواست‌های POST، query DNS به عنوان داده باینری در body درخواست ارسال می‌شود:',
+          'post-example': 'مثال با curl:',
+          'post-no-encoding-title': 'استفاده بدون Base64 Encoding',
+          'post-no-encoding-desc': 'برای اجتناب کامل از encoding base64، از درخواست‌های POST با header <code>Content-Type: application/dns-message</code> استفاده کنید. query DNS به عنوان داده باینری خام در body درخواست ارسال می‌شود:',
+          'config-title': '⚙️ پیکربندی',
+          'config-desc': 'این worker به طور خودکار درخواست‌ها را بین چندین ارائه‌دهنده DNS بر اساس وزن‌های پیکربندی شده متعادل می‌کند. تمام پاسخ‌های DNS به مدت 5 دقیقه cache می‌شوند تا عملکرد بهبود یابد.',
+          'cors-desc': 'برای پشتیبانی از CORS، worker header های زیر را در تمام پاسخ‌ها شامل می‌شود:',
+          'footer': 'Worker پروکسی DoH با عملکرد بالا | با قدرت Cloudflare Workers',
+          'copy-notification': 'URL Endpoint در clipboard کپی شد!'
+        }
+      };
+
+      let currentLang = localStorage.getItem('language') || 'en';
+
+      function changeLanguage(lang) {
+        currentLang = lang;
+        localStorage.setItem('language', lang);
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr';
+        document.body.className = lang === 'fa' ? 'rtl' : '';
+        
+        // Update language buttons
+        document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById('lang-' + lang).classList.add('active');
+        
+        // Update all elements with data-i18n
+        document.querySelectorAll('[data-i18n]').forEach(element => {
+          const key = element.getAttribute('data-i18n');
+          if (translations[lang][key]) {
+            if (element.tagName === 'UL' || element.tagName === 'OL') {
+              element.innerHTML = translations[lang][key];
+            } else {
+              element.innerHTML = translations[lang][key];
+            }
+          }
+        });
+      }
+
       function copyToClipboard() {
         const endpointUrl = document.getElementById('endpointUrl').textContent;
         navigator.clipboard.writeText(endpointUrl).then(() => {
@@ -628,8 +808,21 @@ function serveLandingPage(request, PROVIDERS) {
           }, 3000);
         }).catch(err => {
           console.error('Failed to copy: ', err);
-          alert('Failed to copy URL to clipboard. Please copy it manually: ' + endpointUrl);
+          const msg = currentLang === 'fa' ? 'کپی URL با مشکل مواجه شد. لطفاً به صورت دستی کپی کنید: ' : 'Failed to copy URL to clipboard. Please copy it manually: ';
+          alert(msg + endpointUrl);
         });
+      }
+
+      // Initialize language on page load
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          changeLanguage(currentLang);
+        });
+      } else {
+        // DOM already loaded, run immediately
+        setTimeout(function() {
+          changeLanguage(currentLang);
+        }, 0);
       }
     </script>
   </body>
