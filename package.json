@@ -1,0 +1,17 @@
+{
+  "name": "doh-proxy-worker",
+  "version": "1.0.0",
+  "description": "High-performance DoH proxy worker",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "dependencies": {
+    "itty-router": "^4.0.23"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

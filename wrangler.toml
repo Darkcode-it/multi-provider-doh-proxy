@@ -1,0 +1,23 @@
+name = "doh-proxy-worker"
+compatibility_date = "2024-01-01"
+main = "src/index.js"
+
+[vars]
+CACHE_TTL = 300
+PROVIDERS = [
+    '{"name": "cloudflare", "url": "https://cloudflare-dns.com/dns-query", "weight": 20}',
+    '{"name": "google", "url": "https://dns.google/dns-query", "weight": 15}',
+    '{"name": "quad9", "url": "https://dns.quad9.net/dns-query", "weight": 15}',
+    '{"name": "opendns", "url": "https://doh.opendns.com/dns-query", "weight": 10}',
+    '{"name": "adguard", "url": "https://dns.adguard.com/dns-query", "weight": 10}',
+    '{"name": "controld", "url": "https://freedns.controld.com/p2", "weight": 10}',
+    '{"name": "mullvad", "url": "https://adblock.dns.mullvad.net/dns-query", "weight": 10}',
+    '{"name": "nextdns", "url": "https://dns.nextdns.io/dns-query", "weight": 10}'
+]
+
+[env.production]
+name = "doh-proxy-worker"
+
+[env.development]
+name = "doh-proxy-worker-dev"
+
