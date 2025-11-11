@@ -9,6 +9,10 @@
 > **Note**: Add your screenshot to `docs/preview.png` to replace this placeholder  
 > **توجه**: تصویر خود را در `docs/preview.png` قرار دهید تا این placeholder جایگزین شود
 
+![Preview from src/img](src/img/index.png)
+
+*تصویر موجود در مسیر `src/img/index.png`*
+
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![GitHub Stars](https://img.shields.io/github/stars/Darkcode-it/multi-provider-doh-proxy?style=social)](https://github.com/Darkcode-it/multi-provider-doh-proxy)
