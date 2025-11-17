@@ -1,4 +1,4 @@
-name = "doh-proxy-worker"
+name = "multi-provider-doh-proxy"
 compatibility_date = "2024-01-01"
 main = "src/index.js"
 
