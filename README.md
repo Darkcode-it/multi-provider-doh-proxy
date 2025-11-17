@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![DoH Proxy Worker](docs/preview.png)
+
 
 *Screenshot of the DoH Proxy Worker landing page / تصویر صفحه اصلی Worker پروکسی DoH*
 
