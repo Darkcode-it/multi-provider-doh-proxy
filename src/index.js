@@ -10,17 +10,37 @@ function getConfig(env) {
   
   // دریافت PROVIDERS از env یا استفاده از مقدار پیش‌فرض
   let DOH_PROVIDERS;
-  if (env.PROVIDERS && Array.isArray(env.PROVIDERS)) {
-    // Parse JSON strings from TOML array
-    DOH_PROVIDERS = env.PROVIDERS.map(providerStr => {
+  if (env.PROVIDERS) {
+    let providers = env.PROVIDERS;
+
+    if (typeof providers === 'string') {
       try {
-        return JSON.parse(providerStr);
+        providers = JSON.parse(providers);
       } catch (e) {
-        console.error('Error parsing provider:', providerStr, e);
-        return null;
+        providers = providers
+          .split(',')
+          .map(item => item.trim())
+          .filter(item => item.length > 0);
       }
-    }).filter(p => p !== null);
-  } else {
+    }
+
+    if (Array.isArray(providers)) {
+      DOH_PROVIDERS = providers
+        .map(provider => {
+          if (typeof provider === 'string') {
+            return {
+              name: provider,
+              url: provider,
+              weight: 10
+            };
+          }
+          return provider;
+        })
+        .filter(p => p && p.url && p.name);
+    }
+  }
+
+  if (!DOH_PROVIDERS || DOH_PROVIDERS.length === 0) {
     // Fallback to default providers
     DOH_PROVIDERS = [
       {
@@ -62,6 +82,11 @@ function getConfig(env) {
         name: "NextDNS",
         url: "https://dns.nextdns.io/dns-query",
         weight: 10
+      },
+      {
+        name: "DNS.SB",
+        url: "https://doh.dns.sb/dns-query",
+        weight: 8
       }
     ];
   }
