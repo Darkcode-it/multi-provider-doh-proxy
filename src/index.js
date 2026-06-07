@@ -3,6 +3,38 @@
  * Enhanced with Multi-Provider Support, Load Balancing, Caching, and Health Checks
  */
 
+function parseProviderItem(provider) {
+  if (typeof provider === 'string') {
+    try {
+      const parsed = JSON.parse(provider);
+      if (parsed && typeof parsed === 'object' && parsed.url) {
+        return {
+          name: parsed.name || parsed.url,
+          url: parsed.url,
+          weight: parsed.weight || 10
+        };
+      }
+    } catch (e) {
+      // Plain URL string, not a JSON object
+    }
+    return {
+      name: provider,
+      url: provider,
+      weight: 10
+    };
+  }
+
+  if (provider && provider.url) {
+    return {
+      name: provider.name || provider.url,
+      url: provider.url,
+      weight: provider.weight || 10
+    };
+  }
+
+  return null;
+}
+
 // تابع برای بارگذاری تنظیمات از environment variables
 function getConfig(env) {
   // دریافت CACHE_TTL از env یا استفاده از مقدار پیش‌فرض
@@ -26,16 +58,7 @@ function getConfig(env) {
 
     if (Array.isArray(providers)) {
       DOH_PROVIDERS = providers
-        .map(provider => {
-          if (typeof provider === 'string') {
-            return {
-              name: provider,
-              url: provider,
-              weight: 10
-            };
-          }
-          return provider;
-        })
+        .map(parseProviderItem)
         .filter(p => p && p.url && p.name);
     }
   }
@@ -144,55 +167,67 @@ async function handleRequest(request, env, ctx) {
   const requestBody = isPost ? await request.arrayBuffer() : null;
   
   try {
-    // Create target URL with query parameters
-    const targetUrl = selectedProvider.url + url.search;
+    const response = await fetchFromProvider(
+      selectedProvider,
+      request,
+      url,
+      requestBody,
+      isPost
+    );
 
-    // Prepare headers for the upstream request
-    const headers = new Headers(request.headers);
-    
-    // Ensure proper Content-Type for DNS queries
-    if (isPost) {
-      headers.set('Content-Type', 'application/dns-message');
-    } else {
-      headers.set('Accept', 'application/dns-message');
+    if (response.ok) {
+      return buildDnsResponse(response, selectedProvider, CACHE_TTL);
     }
-    
-    // Add User-Agent for better compatibility
-    headers.set('User-Agent', 'DoH-Proxy-Worker/1.0');
-
-    // Create the upstream request
-    const upstreamRequest = new Request(targetUrl, {
-        method: request.method,
-      headers: headers,
-      body: requestBody,
-      redirect: 'follow'
-    });
-
-    // Send request to DoH provider
-      const response = await fetch(upstreamRequest);
-      
-    // Create response with proper headers
-      const responseHeaders = new Headers(response.headers);
-    
-    // Add CORS headers
-      responseHeaders.set('Access-Control-Allow-Origin', '*');
-      responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
-    
-    // Set cache control for DNS responses
-    responseHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
-    responseHeaders.set('Expires', new Date(Date.now() + CACHE_TTL * 1000).toUTCString());
-    responseHeaders.set('X-Provider', selectedProvider.name);
-
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-      headers: responseHeaders
-      });
-    } catch (error) {
-    // Try fallback providers if the primary one fails
-    return await tryFallbackProviders(request, url, selectedProvider, DOH_PROVIDERS, CACHE_TTL, requestBody, isPost);
+  } catch (error) {
+    // Network error from primary provider — try fallbacks below
   }
+
+  return await tryFallbackProviders(
+    request,
+    url,
+    selectedProvider,
+    DOH_PROVIDERS,
+    CACHE_TTL,
+    requestBody,
+    isPost
+  );
+}
+
+function buildUpstreamHeaders(isPost) {
+  const headers = new Headers();
+  headers.set('Accept', 'application/dns-message');
+  if (isPost) {
+    headers.set('Content-Type', 'application/dns-message');
+  }
+  headers.set('User-Agent', 'DoH-Proxy-Worker/1.0');
+  return headers;
+}
+
+async function fetchFromProvider(provider, request, url, requestBody, isPost) {
+  const targetUrl = provider.url + url.search;
+  const upstreamRequest = new Request(targetUrl, {
+    method: request.method,
+    headers: buildUpstreamHeaders(isPost),
+    body: requestBody,
+    redirect: 'follow'
+  });
+  return fetch(upstreamRequest);
+}
+
+function buildDnsResponse(response, provider, CACHE_TTL) {
+  const responseHeaders = new Headers(response.headers);
+  responseHeaders.set('Access-Control-Allow-Origin', '*');
+  responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
+  responseHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
+  responseHeaders.set('Expires', new Date(Date.now() + CACHE_TTL * 1000).toUTCString());
+  responseHeaders.set('X-Provider', provider.name);
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeaders
+  });
 }
 
 // Serve a beautiful landing page for the root path
@@ -1365,41 +1400,18 @@ async function tryFallbackProviders(request, url, failedProvider, DOH_PROVIDERS,
   
   for (const provider of fallbackProviders) {
     try {
-      const targetUrl = provider.url + url.search;
-      
-      const headers = new Headers(request.headers);
-      if (isPost) {
-        headers.set('Content-Type', 'application/dns-message');
-      } else {
-        headers.set('Accept', 'application/dns-message');
-      }
-      headers.set('User-Agent', 'DoH-Proxy-Worker/1.0');
-      
-      const upstreamRequest = new Request(targetUrl, {
-        method: request.method,
-        headers: headers,
-        body: requestBody,
-        redirect: 'follow'
-      });
-      
-      const response = await fetch(upstreamRequest);
-      
+      const response = await fetchFromProvider(
+        provider,
+        request,
+        url,
+        requestBody,
+        isPost
+      );
+
       if (response.ok) {
-        const responseHeaders = new Headers(response.headers);
-        responseHeaders.set('Access-Control-Allow-Origin', '*');
-        responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
-        responseHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
-        responseHeaders.set('X-Provider', provider.name);
-        
-        return new Response(response.body, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: responseHeaders
-        });
+        return buildDnsResponse(response, provider, CACHE_TTL);
       }
     } catch (error) {
-      // Continue to next provider
       continue;
     }
   }
