@@ -243,6 +243,9 @@ function serveLandingPage(request, PROVIDERS) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>High-Performance DoH Proxy</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <script>
       // Prevent flash of unstyled content - set theme immediately
       (function() {
@@ -303,7 +306,7 @@ function serveLandingPage(request, PROVIDERS) {
       }
       
       body {
-        font-family: 'Courier New', 'Consolas', 'Monaco', 'Lucida Console', monospace;
+        font-family: 'Share Tech Mono', monospace;
         line-height: 1.6;
         color: var(--kali-text);
         background: var(--kali-bg);
@@ -399,7 +402,7 @@ function serveLandingPage(request, PROVIDERS) {
       }
       
       .kali-banner {
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         color: var(--kali-text);
         text-align: center;
         margin: 20px auto;
@@ -422,7 +425,7 @@ function serveLandingPage(request, PROVIDERS) {
         margin-bottom: 15px;
         color: var(--kali-text);
         text-shadow: 0 0 10px var(--kali-text), 0 0 20px var(--kali-text);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-transform: uppercase;
         letter-spacing: 3px;
       }
@@ -432,7 +435,7 @@ function serveLandingPage(request, PROVIDERS) {
         color: var(--kali-text-dim);
         max-width: 700px;
         margin: 0 auto 25px;
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-shadow: 0 0 5px var(--kali-text-dim);
         min-height: 2em;
       }
@@ -442,7 +445,7 @@ function serveLandingPage(request, PROVIDERS) {
         color: var(--kali-text-dim);
         max-width: 700px;
         margin: 15px auto 25px;
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-shadow: 0 0 8px var(--kali-text-dim);
         text-align: center;
         opacity: 0.8;
@@ -450,7 +453,7 @@ function serveLandingPage(request, PROVIDERS) {
       
       .typing-effect {
         display: inline-block;
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         color: var(--kali-text);
         text-shadow: 0 0 10px var(--kali-text);
       }
@@ -493,7 +496,7 @@ function serveLandingPage(request, PROVIDERS) {
         top: 10px;
         left: 10px;
         color: var(--kali-text);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         font-size: 1.2rem;
       }
       
@@ -502,7 +505,7 @@ function serveLandingPage(request, PROVIDERS) {
         margin-bottom: 15px;
         color: var(--kali-text);
         text-shadow: 0 0 10px var(--kali-text);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-transform: uppercase;
       }
       
@@ -510,14 +513,14 @@ function serveLandingPage(request, PROVIDERS) {
         font-size: 1.2rem;
         margin-bottom: 25px;
         color: var(--kali-text-dim);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
       }
       
       .endpoint-url {
         background: var(--kali-bg);
         border-radius: 0;
         padding: 20px;
-        font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+        font-family: 'Share Tech Mono', monospace;
         font-size: 1.1rem;
         margin: 25px 0;
         word-break: break-all;
@@ -540,7 +543,7 @@ function serveLandingPage(request, PROVIDERS) {
         transition: all 0.3s ease;
         margin-top: 10px;
         box-shadow: 0 0 10px var(--kali-shadow);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-transform: uppercase;
       }
       
@@ -572,7 +575,7 @@ function serveLandingPage(request, PROVIDERS) {
         top: 10px;
         left: 10px;
         color: var(--kali-text);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         font-size: 1.2rem;
       }
       
@@ -589,7 +592,7 @@ function serveLandingPage(request, PROVIDERS) {
         display: flex;
         align-items: center;
         gap: 10px;
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-transform: uppercase;
         text-shadow: 0 0 10px var(--kali-text);
       }
@@ -600,14 +603,14 @@ function serveLandingPage(request, PROVIDERS) {
       
       h3 {
         color: var(--kali-text);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-transform: uppercase;
         text-shadow: 0 0 5px var(--kali-text);
       }
       
       p {
         color: var(--kali-text-dim);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
       }
       
       .features {
@@ -662,7 +665,7 @@ function serveLandingPage(request, PROVIDERS) {
         top: 10px;
         left: 10px;
         color: var(--kali-text);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
       }
       
       .provider:hover {
@@ -682,7 +685,7 @@ function serveLandingPage(request, PROVIDERS) {
         font-weight: normal;
         font-size: 1.1rem;
         color: var(--kali-text);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-transform: uppercase;
       }
       
@@ -692,7 +695,7 @@ function serveLandingPage(request, PROVIDERS) {
         padding: 4px 10px;
         border-radius: 0;
         font-size: 0.9rem;
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         border: 1px solid var(--kali-text);
       }
       
@@ -700,7 +703,7 @@ function serveLandingPage(request, PROVIDERS) {
         color: var(--kali-text-dim);
         font-size: 0.9rem;
         word-break: break-all;
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
       }
       
       .provider-description {
@@ -708,7 +711,7 @@ function serveLandingPage(request, PROVIDERS) {
         font-size: 0.8rem;
         margin-top: 8px;
         font-style: normal;
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
       }
       
       .usage-examples {
@@ -761,7 +764,7 @@ function serveLandingPage(request, PROVIDERS) {
         border-radius: 0;
         padding: 20px;
         margin: 15px 0;
-        font-family: 'Courier New', 'Consolas', 'Monaco', monospace;
+        font-family: 'Share Tech Mono', monospace;
         font-size: 0.95rem;
         overflow-x: auto;
         border: 2px solid var(--kali-border);
@@ -775,7 +778,7 @@ function serveLandingPage(request, PROVIDERS) {
         top: -2px;
         left: -2px;
         color: var(--kali-text);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
       }
       
       .endpoint {
@@ -783,7 +786,7 @@ function serveLandingPage(request, PROVIDERS) {
         background: rgba(255, 255, 255, 0.1);
         padding: 3px 8px;
         border-radius: 5px;
-        font-family: 'Consolas', 'Monaco', monospace;
+        font-family: 'Share Tech Mono', monospace;
       }
       
       .btn {
@@ -797,7 +800,7 @@ function serveLandingPage(request, PROVIDERS) {
         margin-top: 15px;
         transition: all 0.3s ease;
         border: 2px solid var(--kali-border);
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-transform: uppercase;
         box-shadow: 0 0 10px var(--kali-shadow);
       }
@@ -821,7 +824,7 @@ function serveLandingPage(request, PROVIDERS) {
         transform: translateX(200%);
         transition: transform 0.3s ease;
         z-index: 1000;
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-transform: uppercase;
         text-shadow: 0 0 10px var(--kali-text);
       }
@@ -835,7 +838,7 @@ function serveLandingPage(request, PROVIDERS) {
         padding: 30px 0;
         color: var(--kali-text-dim);
         font-size: 0.9rem;
-        font-family: 'Courier New', monospace;
+        font-family: 'Share Tech Mono', monospace;
         text-shadow: 0 0 5px var(--kali-text-dim);
       }
       
@@ -1165,6 +1168,9 @@ function serveDNSEncodingExplanation() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DNS Query Encoding in DoH - Explained</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
       :root {
         --primary: #3b82f6;
@@ -1183,7 +1189,7 @@ function serveDNSEncodingExplanation() {
       }
       
       body {
-        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        font-family: 'Share Tech Mono', monospace;
         line-height: 1.6;
         color: var(--dark);
         background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
@@ -1256,7 +1262,7 @@ function serveDNSEncodingExplanation() {
         border-radius: 10px;
         padding: 20px;
         margin: 15px 0;
-        font-family: 'Consolas', 'Monaco', monospace;
+        font-family: 'Share Tech Mono', monospace;
         font-size: 0.95rem;
         overflow-x: auto;
       }
