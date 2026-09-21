@@ -1,7 +1,7 @@
 {
   "name": "doh-proxy-worker",
   "version": "1.0.0",
-  "description": "High-performance DoH proxy worker",
+  "description": "High-performance DoH proxy worker - Optimized for IR",
   "main": "src/index.js",
   "scripts": {
     "dev": "wrangler dev",
@@ -9,6 +9,6 @@
     "test": "echo \"No tests specified\" && exit 0"
   },
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "wrangler": "^3.80.0"
   }
 }
