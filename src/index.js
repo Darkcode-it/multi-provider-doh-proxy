@@ -1431,4 +1431,3 @@ async function tryFallbackProviders(request, url, failedProvider, DOH_PROVIDERS,
     }
   });
 }
-
