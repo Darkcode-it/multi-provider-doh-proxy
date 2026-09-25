@@ -1,1945 +1,1434 @@
-// /**
-//  * High-Performance Cloudflare Worker for Proxying DNS-over-HTTPS (DoH) Requests
-//  * Enhanced with Multi-Provider Support, Load Balancing, Caching, and Health Checks
-//  */
+/**
+ * High-Performance Cloudflare Worker for Proxying DNS-over-HTTPS (DoH) Requests
+ * Enhanced with Multi-Provider Support, Load Balancing, Caching, and Health Checks
+ */
 
-// function parseProviderItem(provider) {
-//   if (typeof provider === 'string') {
-//     try {
-//       const parsed = JSON.parse(provider);
-//       if (parsed && typeof parsed === 'object' && parsed.url) {
-//         return {
-//           name: parsed.name || parsed.url,
-//           url: parsed.url,
-//           weight: parsed.weight || 10
-//         };
-//       }
-//     } catch (e) {
-//       // Plain URL string, not a JSON object
-//     }
-//     return {
-//       name: provider,
-//       url: provider,
-//       weight: 10
-//     };
-//   }
+function parseProviderItem(provider) {
+  if (typeof provider === 'string') {
+    try {
+      const parsed = JSON.parse(provider);
+      if (parsed && typeof parsed === 'object' && parsed.url) {
+        return {
+          name: parsed.name || parsed.url,
+          url: parsed.url,
+          weight: parsed.weight || 10
+        };
+      }
+    } catch (e) {
+      // Plain URL string, not a JSON object
+    }
+    return {
+      name: provider,
+      url: provider,
+      weight: 10
+    };
+  }
 
-//   if (provider && provider.url) {
-//     return {
-//       name: provider.name || provider.url,
-//       url: provider.url,
-//       weight: provider.weight || 10
-//     };
-//   }
+  if (provider && provider.url) {
+    return {
+      name: provider.name || provider.url,
+      url: provider.url,
+      weight: provider.weight || 10
+    };
+  }
 
-//   return null;
-// }
+  return null;
+}
 
-// // تابع برای بارگذاری تنظیمات از environment variables
-// function getConfig(env) {
-//   // دریافت CACHE_TTL از env یا استفاده از مقدار پیش‌فرض
-//   const CACHE_TTL = env.CACHE_TTL ? parseInt(env.CACHE_TTL) : 300;
+// تابع برای بارگذاری تنظیمات از environment variables
+function getConfig(env) {
+  // دریافت CACHE_TTL از env یا استفاده از مقدار پیش‌فرض
+  const CACHE_TTL = env.CACHE_TTL ? parseInt(env.CACHE_TTL) : 300;
   
-//   // دریافت PROVIDERS از env یا استفاده از مقدار پیش‌فرض
-//   let DOH_PROVIDERS;
-//   if (env.PROVIDERS) {
-//     let providers = env.PROVIDERS;
+  // دریافت PROVIDERS از env یا استفاده از مقدار پیش‌فرض
+  let DOH_PROVIDERS;
+  if (env.PROVIDERS) {
+    let providers = env.PROVIDERS;
 
-//     if (typeof providers === 'string') {
-//       try {
-//         providers = JSON.parse(providers);
-//       } catch (e) {
-//         providers = providers
-//           .split(',')
-//           .map(item => item.trim())
-//           .filter(item => item.length > 0);
-//       }
-//     }
+    if (typeof providers === 'string') {
+      try {
+        providers = JSON.parse(providers);
+      } catch (e) {
+        providers = providers
+          .split(',')
+          .map(item => item.trim())
+          .filter(item => item.length > 0);
+      }
+    }
 
-//     if (Array.isArray(providers)) {
-//       DOH_PROVIDERS = providers
-//         .map(parseProviderItem)
-//         .filter(p => p && p.url && p.name);
-//     }
-//   }
+    if (Array.isArray(providers)) {
+      DOH_PROVIDERS = providers
+        .map(parseProviderItem)
+        .filter(p => p && p.url && p.name);
+    }
+  }
 
-//   if (!DOH_PROVIDERS || DOH_PROVIDERS.length === 0) {
-//     // Fallback to default providers
-//     DOH_PROVIDERS = [
-//       {
-//         name: "Cloudflare",
-//         url: "https://cloudflare-dns.com/dns-query",
-//         weight: 20
-//       },
-//       {
-//         name: "Google",
-//         url: "https://dns.google/dns-query",
-//         weight: 15
-//       },
-//       {
-//         name: "Quad9",
-//         url: "https://dns.quad9.net/dns-query",
-//         weight: 15
-//       },
-//       {
-//         name: "OpenDNS",
-//         url: "https://doh.opendns.com/dns-query",
-//         weight: 10
-//       },
-//       {
-//         name: "AdGuard",
-//         url: "https://dns.adguard.com/dns-query",
-//         weight: 10
-//       },
-//       {
-//         name: "ControlD",
-//         url: "https://freedns.controld.com/p2",
-//         weight: 10
-//       },
-//       {
-//         name: "Mullvad",
-//         url: "https://adblock.dns.mullvad.net/dns-query",
-//         weight: 10
-//       },
-//       {
-//         name: "NextDNS",
-//         url: "https://dns.nextdns.io/dns-query",
-//         weight: 10
-//       },
-//       {
-//         name: "DNS.SB",
-//         url: "https://doh.dns.sb/dns-query",
-//         weight: 8
-//       }
-//     ];
-//   }
+  if (!DOH_PROVIDERS || DOH_PROVIDERS.length === 0) {
+    // Fallback to default providers
+    DOH_PROVIDERS = [
+      {
+        name: "Cloudflare",
+        url: "https://cloudflare-dns.com/dns-query",
+        weight: 20
+      },
+      {
+        name: "Google",
+        url: "https://dns.google/dns-query",
+        weight: 15
+      },
+      {
+        name: "Quad9",
+        url: "https://dns.quad9.net/dns-query",
+        weight: 15
+      },
+      {
+        name: "OpenDNS",
+        url: "https://doh.opendns.com/dns-query",
+        weight: 10
+      },
+      {
+        name: "AdGuard",
+        url: "https://dns.adguard.com/dns-query",
+        weight: 10
+      },
+      {
+        name: "ControlD",
+        url: "https://freedns.controld.com/p2",
+        weight: 10
+      },
+      {
+        name: "Mullvad",
+        url: "https://adblock.dns.mullvad.net/dns-query",
+        weight: 10
+      },
+      {
+        name: "NextDNS",
+        url: "https://dns.nextdns.io/dns-query",
+        weight: 10
+      },
+      {
+        name: "DNS.SB",
+        url: "https://doh.dns.sb/dns-query",
+        weight: 8
+      }
+    ];
+  }
   
-//   return { CACHE_TTL, DOH_PROVIDERS };
-// }
-
-// export default {
-//   async fetch(request, env, ctx) {
-//     return handleRequest(request, env, ctx);
-//   }
-// };
-
-// async function handleRequest(request, env, ctx) {
-//   const { CACHE_TTL, DOH_PROVIDERS } = getConfig(env);
-//   const url = new URL(request.url);
-  
-//   // Serve landing page for root path
-//   if (url.pathname === '/') {
-//     return serveLandingPage(request, DOH_PROVIDERS);
-//   }
-  
-//   // Serve DNS encoding explanation
-//   if (url.pathname === '/dns-encoding') {
-//     return serveDNSEncodingExplanation();
-//   }
-  
-//     // Handle CORS preflight requests
-//     if (request.method === 'OPTIONS') {
-//     return handleCORS();
-//   }
-
-//   // Validate DNS request
-//   if (url.pathname !== '/dns-query') {
-//     return new Response('Invalid endpoint. Use /dns-query', { status: 400 });
-//   }
-
-//   // Check if it's a DNS query (either via query parameter or POST body)
-//   const isGet = request.method === 'GET';
-//   const isPost = request.method === 'POST';
-  
-//   if (!isGet && !isPost) {
-//     return new Response('Method not allowed. Use GET or POST.', { status: 405 });
-//   }
-
-//   // Check for DNS query parameter in GET requests
-//   if (isGet && !url.searchParams.has('dns')) {
-//     return new Response('Missing DNS query parameter', { status: 400 });
-//   }
-
-//   // Select the best DoH provider based on weighted random selection
-//   const selectedProvider = selectProvider(DOH_PROVIDERS);
-  
-//   // Clone request to preserve body for fallback if needed
-//   const requestBody = isPost ? await request.arrayBuffer() : null;
-  
-//   try {
-//     const response = await fetchFromProvider(
-//       selectedProvider,
-//       request,
-//       url,
-//       requestBody,
-//       isPost
-//     );
-
-//     if (response.ok) {
-//       return buildDnsResponse(response, selectedProvider, CACHE_TTL);
-//     }
-//   } catch (error) {
-//     // Network error from primary provider — try fallbacks below
-//   }
-
-//   return await tryFallbackProviders(
-//     request,
-//     url,
-//     selectedProvider,
-//     DOH_PROVIDERS,
-//     CACHE_TTL,
-//     requestBody,
-//     isPost
-//   );
-// }
-
-// function buildUpstreamHeaders(isPost) {
-//   const headers = new Headers();
-//   headers.set('Accept', 'application/dns-message');
-//   if (isPost) {
-//     headers.set('Content-Type', 'application/dns-message');
-//   }
-//   headers.set('User-Agent', 'DoH-Proxy-Worker/1.0');
-//   return headers;
-// }
-
-// async function fetchFromProvider(provider, request, url, requestBody, isPost) {
-//   const targetUrl = provider.url + url.search;
-//   const upstreamRequest = new Request(targetUrl, {
-//     method: request.method,
-//     headers: buildUpstreamHeaders(isPost),
-//     body: requestBody,
-//     redirect: 'follow'
-//   });
-//   return fetch(upstreamRequest);
-// }
-
-// function buildDnsResponse(response, provider, CACHE_TTL) {
-//   const responseHeaders = new Headers(response.headers);
-//   responseHeaders.set('Access-Control-Allow-Origin', '*');
-//   responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-//   responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
-//   responseHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
-//   responseHeaders.set('Expires', new Date(Date.now() + CACHE_TTL * 1000).toUTCString());
-//   responseHeaders.set('X-Provider', provider.name);
-
-//   return new Response(response.body, {
-//     status: response.status,
-//     statusText: response.statusText,
-//     headers: responseHeaders
-//   });
-// }
-
-// // Serve a beautiful landing page for the root path
-// function serveLandingPage(request, PROVIDERS) {
-//   const workerUrl = new URL(request.url);
-//   workerUrl.pathname = '/dns-query';
-//   const dnsEndpoint = workerUrl.toString();
-  
-//   const html = `
-//   <!DOCTYPE html>
-//   <html lang="en" dir="ltr" data-theme="dark">
-//   <head>
-//     <meta charset="UTF-8">
-//     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-//     <title>High-Performance DoH Proxy</title>
-//     <link rel="preconnect" href="https://fonts.googleapis.com">
-//     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-//     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
-//     <script>
-//       // Prevent flash of unstyled content - set theme immediately
-//       (function() {
-//         // Always use dark theme
-//         var theme = 'dark';
-//         document.documentElement.setAttribute('data-theme', theme);
-//         document.documentElement.lang = 'en';
-//         document.documentElement.dir = 'ltr';
-//       })();
-//     </script>
-//     <style>
-//       :root {
-//         --primary: #00ff41;
-//         --primary-dark: #00cc33;
-//         --secondary: #00ff41;
-//         --kali-green: #00ff41;
-//         --kali-dark: #0a0e27;
-//         --kali-bg: #0a0e27;
-//         --kali-card: #1a1f3a;
-//         --kali-border: #00ff41;
-//         --kali-text: #00ff41;
-//         --kali-text-dim: #00cc33;
-//         --kali-shadow: rgba(0, 255, 65, 0.3);
-//       }
-      
-//       [data-theme="dark"] {
-//         --bg-primary: #0a0e27;
-//         --bg-secondary: #1a1f3a;
-//         --bg-card: #1a1f3a;
-//         --bg-card-hover: #252b4a;
-//         --text-primary: #00ff41;
-//         --text-secondary: #00cc33;
-//         --text-muted: #00aa22;
-//         --border-color: #00ff41;
-//         --shadow: rgba(0, 255, 65, 0.2);
-//         --gradient-start: #0a0e27;
-//         --gradient-end: #0a0e27;
-//       }
-      
-//       [data-theme="light"] {
-//         --bg-primary: #0a0e27;
-//         --bg-secondary: #1a1f3a;
-//         --bg-card: #1a1f3a;
-//         --bg-card-hover: #252b4a;
-//         --text-primary: #00ff41;
-//         --text-secondary: #00cc33;
-//         --text-muted: #00aa22;
-//         --border-color: #00ff41;
-//         --shadow: rgba(0, 255, 65, 0.2);
-//         --gradient-start: #0a0e27;
-//         --gradient-end: #0a0e27;
-//       }
-      
-//       * {
-//         margin: 0;
-//         padding: 0;
-//         box-sizing: border-box;
-//       }
-      
-//       body {
-//         font-family: 'Share Tech Mono', monospace;
-//         line-height: 1.6;
-//         color: var(--kali-text);
-//         background: var(--kali-bg);
-//         min-height: 100vh;
-//         padding: 20px;
-//         transition: background 0.3s ease, color 0.3s ease;
-//         position: relative;
-//         overflow-x: hidden;
-//       }
-      
-//       body::before {
-//         content: '';
-//         position: fixed;
-//         top: 0;
-//         left: 0;
-//         width: 100%;
-//         height: 100%;
-//         background: 
-//           repeating-linear-gradient(
-//             0deg,
-//             transparent,
-//             transparent 2px,
-//             rgba(0, 255, 65, 0.03) 2px,
-//             rgba(0, 255, 65, 0.03) 4px
-//           );
-//         pointer-events: none;
-//         z-index: 0;
-//       }
-      
-//       .container {
-//         max-width: 1200px;
-//         margin: 0 auto;
-//         position: relative;
-//         z-index: 1;
-//       }
-      
-//       .top-controls {
-//         position: fixed;
-//         top: 20px;
-//         right: 20px;
-//         z-index: 1001;
-//         display: flex;
-//         gap: 10px;
-//         align-items: center;
-//       }
-      
-//       .social-links {
-//         display: flex;
-//         gap: 10px;
-//         align-items: center;
-//       }
-      
-//       .social-link {
-//         width: 50px;
-//         height: 50px;
-//         border-radius: 0;
-//         border: 2px solid var(--kali-border);
-//         background: var(--kali-card);
-//         color: var(--kali-text);
-//         display: flex;
-//         align-items: center;
-//         justify-content: center;
-//         text-decoration: none;
-//         font-size: 1.3rem;
-//         transition: all 0.3s ease;
-//         box-shadow: 0 0 10px var(--kali-shadow);
-//         position: relative;
-//         z-index: 1002;
-//       }
-      
-//       .social-link:hover {
-//         transform: translateY(-3px) scale(1.1);
-//         border-color: var(--kali-text);
-//         background: var(--kali-text);
-//         color: var(--kali-bg);
-//         box-shadow: 0 0 20px var(--kali-text);
-//       }
-      
-//       .social-link.github:hover {
-//         background: var(--kali-text);
-//         border-color: var(--kali-text);
-//       }
-      
-//       .social-link.telegram:hover {
-//         background: var(--kali-text);
-//         border-color: var(--kali-text);
-//       }
-      
-//       header {
-//         text-align: center;
-//         padding: 40px 20px;
-//         margin-bottom: 30px;
-//       }
-      
-//       .kali-banner {
-//         font-family: 'Share Tech Mono', monospace;
-//         color: var(--kali-text);
-//         text-align: center;
-//         margin: 20px auto;
-//         font-size: 0.7rem;
-//         line-height: 1.2;
-//         text-shadow: 0 0 10px var(--kali-text);
-//         white-space: pre;
-//         overflow-x: auto;
-//         max-width: 100%;
-//       }
-      
-//       @media (max-width: 768px) {
-//         .kali-banner {
-//           font-size: 0.5rem;
-//         }
-//       }
-      
-//       h1 {
-//         font-size: 2.8rem;
-//         margin-bottom: 15px;
-//         color: var(--kali-text);
-//         text-shadow: 0 0 10px var(--kali-text), 0 0 20px var(--kali-text);
-//         font-family: 'Share Tech Mono', monospace;
-//         text-transform: uppercase;
-//         letter-spacing: 3px;
-//       }
-      
-//       .subtitle {
-//         font-size: 1.3rem;
-//         color: var(--kali-text-dim);
-//         max-width: 700px;
-//         margin: 0 auto 25px;
-//         font-family: 'Share Tech Mono', monospace;
-//         text-shadow: 0 0 5px var(--kali-text-dim);
-//         min-height: 2em;
-//       }
-      
-//       .developer-credit {
-//         font-size: 1rem;
-//         color: var(--kali-text-dim);
-//         max-width: 700px;
-//         margin: 15px auto 25px;
-//         font-family: 'Share Tech Mono', monospace;
-//         text-shadow: 0 0 8px var(--kali-text-dim);
-//         text-align: center;
-//         opacity: 0.8;
-//       }
-      
-//       .typing-effect {
-//         display: inline-block;
-//         font-family: 'Share Tech Mono', monospace;
-//         color: var(--kali-text);
-//         text-shadow: 0 0 10px var(--kali-text);
-//       }
-      
-//       .typing-cursor {
-//         display: inline-block;
-//         width: 2px;
-//         height: 1.2em;
-//         background: var(--kali-text);
-//         margin-left: 3px;
-//         animation: blink 1s infinite;
-//         vertical-align: middle;
-//         box-shadow: 0 0 10px var(--kali-text);
-//       }
-      
-//       @keyframes blink {
-//         0%, 50% {
-//           opacity: 1;
-//         }
-//         51%, 100% {
-//           opacity: 0;
-//         }
-//       }
-      
-//       .endpoint-card {
-//         background: var(--kali-card);
-//         color: var(--kali-text);
-//         border-radius: 0;
-//         padding: 30px;
-//         margin-bottom: 40px;
-//         text-align: center;
-//         box-shadow: 0 0 20px var(--kali-shadow);
-//         border: 2px solid var(--kali-border);
-//         position: relative;
-//       }
-      
-//       .endpoint-card::before {
-//         content: '>>>';
-//         position: absolute;
-//         top: 10px;
-//         left: 10px;
-//         color: var(--kali-text);
-//         font-family: 'Share Tech Mono', monospace;
-//         font-size: 1.2rem;
-//       }
-      
-//       .endpoint-card h2 {
-//         font-size: 2rem;
-//         margin-bottom: 15px;
-//         color: var(--kali-text);
-//         text-shadow: 0 0 10px var(--kali-text);
-//         font-family: 'Share Tech Mono', monospace;
-//         text-transform: uppercase;
-//       }
-      
-//       .endpoint-card p {
-//         font-size: 1.2rem;
-//         margin-bottom: 25px;
-//         color: var(--kali-text-dim);
-//         font-family: 'Share Tech Mono', monospace;
-//       }
-      
-//       .endpoint-url {
-//         background: var(--kali-bg);
-//         border-radius: 0;
-//         padding: 20px;
-//         font-family: 'Share Tech Mono', monospace;
-//         font-size: 1.1rem;
-//         margin: 25px 0;
-//         word-break: break-all;
-//         position: relative;
-//         text-align: left;
-//         border: 2px solid var(--kali-border);
-//         color: var(--kali-text);
-//         box-shadow: inset 0 0 10px var(--kali-shadow);
-//       }
-      
-//       .copy-btn {
-//         background: var(--kali-bg);
-//         color: var(--kali-text);
-//         border: 2px solid var(--kali-border);
-//         padding: 12px 25px;
-//         border-radius: 0;
-//         font-weight: normal;
-//         font-size: 1.1rem;
-//         cursor: pointer;
-//         transition: all 0.3s ease;
-//         margin-top: 10px;
-//         box-shadow: 0 0 10px var(--kali-shadow);
-//         font-family: 'Share Tech Mono', monospace;
-//         text-transform: uppercase;
-//       }
-      
-//       .copy-btn:hover {
-//         background: var(--kali-text);
-//         color: var(--kali-bg);
-//         transform: translateY(-2px);
-//         box-shadow: 0 0 20px var(--kali-text);
-//       }
-      
-//       .copy-btn:active {
-//         transform: translateY(0);
-//       }
-      
-//       .card {
-//         background: var(--kali-card);
-//         border-radius: 0;
-//         box-shadow: 0 0 15px var(--kali-shadow);
-//         padding: 30px;
-//         margin-bottom: 30px;
-//         transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
-//         border: 2px solid var(--kali-border);
-//         position: relative;
-//       }
-      
-//       .card::before {
-//         content: '$';
-//         position: absolute;
-//         top: 10px;
-//         left: 10px;
-//         color: var(--kali-text);
-//         font-family: 'Share Tech Mono', monospace;
-//         font-size: 1.2rem;
-//       }
-      
-//       .card:hover {
-//         transform: translateY(-5px);
-//         box-shadow: 0 0 25px var(--kali-text);
-//         border-color: var(--kali-text);
-//       }
-      
-//       h2 {
-//         font-size: 1.8rem;
-//         margin-bottom: 20px;
-//         color: var(--kali-text);
-//         display: flex;
-//         align-items: center;
-//         gap: 10px;
-//         font-family: 'Share Tech Mono', monospace;
-//         text-transform: uppercase;
-//         text-shadow: 0 0 10px var(--kali-text);
-//       }
-      
-//       h2 i {
-//         color: var(--kali-text);
-//       }
-      
-//       h3 {
-//         color: var(--kali-text);
-//         font-family: 'Share Tech Mono', monospace;
-//         text-transform: uppercase;
-//         text-shadow: 0 0 5px var(--kali-text);
-//       }
-      
-//       p {
-//         color: var(--kali-text-dim);
-//         font-family: 'Share Tech Mono', monospace;
-//       }
-      
-//       .features {
-//         display: grid;
-//         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-//         gap: 25px;
-//         margin-bottom: 40px;
-//       }
-      
-//       .feature {
-//         display: flex;
-//         gap: 15px;
-//       }
-      
-//       .feature-icon {
-//         background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-//         color: white;
-//         width: 50px;
-//         height: 50px;
-//         border-radius: 12px;
-//         display: flex;
-//         align-items: center;
-//         justify-content: center;
-//         flex-shrink: 0;
-//         font-size: 1.4rem;
-//       }
-      
-//       .feature-content h3 {
-//         margin-bottom: 8px;
-//         font-size: 1.3rem;
-//       }
-      
-//       .providers {
-//         display: grid;
-//         grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-//         gap: 20px;
-//         margin-top: 20px;
-//       }
-      
-//       .provider {
-//         background: var(--kali-bg);
-//         border-radius: 0;
-//         padding: 20px;
-//         border: 2px solid var(--kali-border);
-//         transition: all 0.3s ease;
-//         position: relative;
-//       }
-      
-//       .provider::before {
-//         content: '●';
-//         position: absolute;
-//         top: 10px;
-//         left: 10px;
-//         color: var(--kali-text);
-//         font-family: 'Share Tech Mono', monospace;
-//       }
-      
-//       .provider:hover {
-//         border-color: var(--kali-text);
-//         transform: translateY(-2px);
-//         box-shadow: 0 0 15px var(--kali-text);
-//       }
-      
-//       .provider-header {
-//         display: flex;
-//         justify-content: space-between;
-//         align-items: center;
-//         margin-bottom: 15px;
-//       }
-      
-//       .provider-name {
-//         font-weight: normal;
-//         font-size: 1.1rem;
-//         color: var(--kali-text);
-//         font-family: 'Share Tech Mono', monospace;
-//         text-transform: uppercase;
-//       }
-      
-//       .provider-weight {
-//         background: var(--kali-text);
-//         color: var(--kali-bg);
-//         padding: 4px 10px;
-//         border-radius: 0;
-//         font-size: 0.9rem;
-//         font-family: 'Share Tech Mono', monospace;
-//         border: 1px solid var(--kali-text);
-//       }
-      
-//       .provider-url {
-//         color: var(--kali-text-dim);
-//         font-size: 0.9rem;
-//         word-break: break-all;
-//         font-family: 'Share Tech Mono', monospace;
-//       }
-      
-//       .provider-description {
-//         color: var(--kali-text-dim);
-//         font-size: 0.8rem;
-//         margin-top: 8px;
-//         font-style: normal;
-//         font-family: 'Share Tech Mono', monospace;
-//       }
-      
-//       .usage-examples {
-//         background: var(--kali-card);
-//         color: var(--kali-text);
-//         border-radius: 0;
-//         padding: 30px;
-//         border: 2px solid var(--kali-border);
-//         box-shadow: 0 0 15px var(--kali-shadow);
-//       }
-      
-//       .usage-examples h2 {
-//         color: var(--kali-text);
-//         text-shadow: 0 0 10px var(--kali-text);
-//       }
-      
-//       .usage-examples h3 {
-//         color: var(--kali-text);
-//         margin-top: 20px;
-//         text-shadow: 0 0 5px var(--kali-text);
-//       }
-      
-//       .usage-examples p {
-//         color: var(--kali-text-dim);
-//       }
-      
-//       .usage-examples a {
-//         color: var(--kali-text);
-//         text-decoration: underline;
-//         text-shadow: 0 0 5px var(--kali-text);
-//       }
-      
-//       .usage-examples a:hover {
-//         color: var(--kali-text);
-//         text-shadow: 0 0 10px var(--kali-text);
-//       }
-      
-//       .usage-examples strong {
-//         color: var(--kali-text);
-//         text-shadow: 0 0 5px var(--kali-text);
-//       }
-      
-//       .usage-examples ul li {
-//         color: var(--kali-text-dim);
-//       }
-      
-//       .code-block {
-//         background: var(--kali-bg);
-//         color: var(--kali-text);
-//         border-radius: 0;
-//         padding: 20px;
-//         margin: 15px 0;
-//         font-family: 'Share Tech Mono', monospace;
-//         font-size: 0.95rem;
-//         overflow-x: auto;
-//         border: 2px solid var(--kali-border);
-//         box-shadow: inset 0 0 10px var(--kali-shadow);
-//         position: relative;
-//       }
-      
-//       .code-block::before {
-//         content: '┌─';
-//         position: absolute;
-//         top: -2px;
-//         left: -2px;
-//         color: var(--kali-text);
-//         font-family: 'Share Tech Mono', monospace;
-//       }
-      
-//       .endpoint {
-//         display: inline-block;
-//         background: rgba(255, 255, 255, 0.1);
-//         padding: 3px 8px;
-//         border-radius: 5px;
-//         font-family: 'Share Tech Mono', monospace;
-//       }
-      
-//       .btn {
-//         display: inline-block;
-//         background: var(--kali-bg);
-//         color: var(--kali-text);
-//         padding: 10px 20px;
-//         border-radius: 0;
-//         text-decoration: none;
-//         font-weight: normal;
-//         margin-top: 15px;
-//         transition: all 0.3s ease;
-//         border: 2px solid var(--kali-border);
-//         font-family: 'Share Tech Mono', monospace;
-//         text-transform: uppercase;
-//         box-shadow: 0 0 10px var(--kali-shadow);
-//       }
-      
-//       .btn:hover {
-//         background: var(--kali-text);
-//         color: var(--kali-bg);
-//         box-shadow: 0 0 20px var(--kali-text);
-//       }
-      
-//       .copy-notification {
-//         position: fixed;
-//         top: 80px;
-//         right: 20px;
-//         background: var(--kali-card);
-//         color: var(--kali-text);
-//         padding: 15px 25px;
-//         border-radius: 0;
-//         box-shadow: 0 0 20px var(--kali-text);
-//         border: 2px solid var(--kali-border);
-//         transform: translateX(200%);
-//         transition: transform 0.3s ease;
-//         z-index: 1000;
-//         font-family: 'Share Tech Mono', monospace;
-//         text-transform: uppercase;
-//         text-shadow: 0 0 10px var(--kali-text);
-//       }
-      
-//       .copy-notification.show {
-//         transform: translateX(0);
-//       }
-      
-//       footer {
-//         text-align: center;
-//         padding: 30px 0;
-//         color: var(--kali-text-dim);
-//         font-size: 0.9rem;
-//         font-family: 'Share Tech Mono', monospace;
-//         text-shadow: 0 0 5px var(--kali-text-dim);
-//       }
-      
-//       @media (max-width: 768px) {
-//         h1 {
-//           font-size: 2.2rem;
-//         }
-        
-//         .subtitle {
-//           font-size: 1.1rem;
-//         }
-        
-//         .developer-credit {
-//           font-size: 0.9rem;
-//         }
-        
-//         .card {
-//           padding: 20px;
-//         }
-        
-//         .endpoint-card {
-//           padding: 20px;
-//         }
-        
-//         .top-controls {
-//           top: 10px;
-//           right: 10px;
-//           flex-wrap: wrap;
-//           gap: 8px;
-//         }
-        
-//         body.rtl .top-controls {
-//           right: auto;
-//           left: 10px;
-//         }
-        
-//         .social-link {
-//           width: 45px;
-//           height: 45px;
-//           font-size: 1.1rem;
-//         }
-//       }
-//     </style>
-//   </head>
-//   <body>
-//     <div class="top-controls">
-//       <div class="social-links">
-//         <a href="https://github.com/Darkcode-it/multi-provider-doh-proxy" target="_blank" rel="noopener noreferrer" class="social-link github" title="GitHub">
-//           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-//             <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-//           </svg>
-//         </a>
-//         <a href="https://t.me/darkcodeit" target="_blank" rel="noopener noreferrer" class="social-link telegram" title="Telegram">
-//           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-//             <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.941z"/>
-//           </svg>
-//         </a>
-//       </div>
-//     </div>
-    
-//     <div class="container">
-//       <header>
-//         <pre class="kali-banner">
-//     _    __     _ _     _    _       _ 
-//    | |  / /__ _| | |__ | |  (_)___  | |
-//    | | / / _ \` | | '_ \| |  | / __| | |
-//    | |/ /  __/ | | |_) | |__| \__ \ |_|
-//    |_/_/ \___|_|_|_.__/ \____|___/ (_)
-//         </pre>
-//         <h1>High-Performance DoH Proxy</h1>
-//         <p class="subtitle">
-//           <span class="typing-effect" id="typing-text"></span>
-//           <span class="typing-cursor"></span>
-//         </p>
-//         <p class="developer-credit">Developed and designed by darkcodeit</p>
-//       </header>
-      
-//       <div class="endpoint-card">
-//         <h2>🚀 Your DoH Endpoint</h2>
-//         <p>Use this URL as your DNS-over-HTTPS resolver</p>
-//         <div class="endpoint-url" id="endpointUrl">${dnsEndpoint}</div>
-//         <button class="copy-btn" onclick="copyToClipboard()">Copy Endpoint URL</button>
-//       </div>
-      
-//       <div class="features">
-//         <div class="card">
-//           <div class="feature">
-//             <div class="feature-icon">⚡</div>
-//             <div class="feature-content">
-//               <h3>Lightning Fast</h3>
-//               <p>Leverages Cloudflare's global edge network for minimal latency and maximum performance.</p>
-//             </div>
-//           </div>
-//         </div>
-        
-//         <div class="card">
-//           <div class="feature">
-//             <div class="feature-icon">🔄</div>
-//             <div class="feature-content">
-//               <h3>Load Balancing</h3>
-//               <p>Intelligently distributes requests across multiple DNS providers based on configurable weights.</p>
-//             </div>
-//           </div>
-//         </div>
-        
-//         <div class="card">
-//           <div class="feature">
-//             <div class="feature-icon">🛡️</div>
-//             <div class="feature-content">
-//               <h3>Automatic Failover</h3>
-//               <p>Seamlessly switches to backup providers when primary ones experience issues.</p>
-//             </div>
-//           </div>
-//         </div>
-//       </div>
-      
-//       <div class="card">
-//         <h2>📡 Supported DNS Providers</h2>
-//         <p>This proxy supports both general DNS providers and ad-blocking focused providers for enhanced privacy and security.</p>
-//         <div class="providers">
-//           ${PROVIDERS.map(p => `
-//           <div class="provider">
-//             <div class="provider-header">
-//               <div class="provider-name">${p.name}</div>
-//               <div class="provider-weight">${p.weight}%</div>
-//             </div>
-//             <div class="provider-url">${p.url}</div>
-//             ${(p.name === 'AdGuard' || p.name === 'ControlD' || p.name === 'Mullvad' || p.name === 'NextDNS') ? 
-//               `<div class="provider-description">Blocks ads, trackers, and malicious domains</div>` : ''}
-//           </div>
-//           `).join('')}
-//         </div>
-//       </div>
-      
-//       <div class="card usage-examples">
-//         <h2>🔧 Usage Examples</h2>
-//         <p>Use this worker as a DoH endpoint:</p>
-        
-//         <h3>GET Requests</h3>
-//         <p>For GET requests, the DNS query must be base64url-encoded as per the <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">RFC 8484 specification</a>:</p>
-//         <div class="code-block">
-//           GET /dns-query?dns=&lt;base64url-encoded-dns-query&gt;
-//         </div>
-//         <p><strong>Why base64url encoding?</strong></p>
-//         <ul class="encoding-list">
-//           <li>DNS queries are binary data that cannot be safely transmitted in URLs</li>
-//           <li>Base64url encoding converts binary data into a URL-safe string format</li>
-//           <li>Standard base64 uses characters like '+' and '/' which have special meaning in URLs</li>
-//           <li>Base64url replaces these with '-' and '_' making it URL-safe</li>
-//         </ul>
-//         <p><a href="/dns-encoding" class="btn">Detailed DNS Encoding Explanation</a></p>
-//         <p>Example with curl:</p>
-//         <div class="code-block">
-//           curl "${dnsEndpoint}?dns=q80BAAABAAAAAAAAA3d3dwdleGFtcGxlA2NvbQAAAQAB"
-//         </div>
-        
-//         <h3>POST Requests</h3>
-//         <p>For POST requests, the DNS query is sent as binary data in the request body:</p>
-//         <div class="code-block">
-//           POST /dns-query<br>
-//           Content-Type: application/dns-message<br>
-//           &lt;binary-dns-query&gt;
-//         </div>
-//         <p>Example with curl:</p>
-//         <div class="code-block">
-//           curl -H "Content-Type: application/dns-message" \\<br>
-//           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--data-binary @query.dns \\<br>
-//           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${dnsEndpoint}
-//         </div>
-        
-//         <h3>Using Without Base64 Encoding</h3>
-//         <p>To avoid base64 encoding entirely, use POST requests with the <code>Content-Type: application/dns-message</code> header. The DNS query is sent as raw binary data in the request body:</p>
-//         <div class="code-block">
-//           curl -H "Content-Type: application/dns-message" \\<br>
-//           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--data-binary @query.dns \\<br>
-//           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${dnsEndpoint}
-//         </div>
-//       </div>
-      
-//       <div class="card">
-//         <h2>⚙️ Configuration</h2>
-//         <p>This worker automatically balances requests across multiple DNS providers based on the configured weights. All DNS responses are cached for 5 minutes to improve performance.</p>
-//         <p>For CORS support, the worker includes the following headers in all responses:</p>
-//         <div class="code-block">
-//           Access-Control-Allow-Origin: *<br>
-//           Access-Control-Allow-Methods: GET, POST, OPTIONS<br>
-//           Access-Control-Allow-Headers: Content-Type, Accept
-//         </div>
-//       </div>
-      
-//       <footer>
-//         <p>High-Performance DoH Proxy Worker | Powered by Cloudflare Workers</p>
-//       </footer>
-//     </div>
-    
-//     <div class="copy-notification" id="copyNotification">Endpoint URL copied to clipboard!</div>
-    
-//     <script>
-//       // Fixed preferences - always dark theme
-//       let currentTheme = 'dark';
-
-//       // Initialize theme (always dark)
-//       function initTheme() {
-//         if (document.documentElement) {
-//           document.documentElement.setAttribute('data-theme', 'dark');
-//         }
-//       }
-
-//       // Typing effect function - simulates terminal typing
-//       function typeText(element, text, minSpeed = 30, maxSpeed = 120) {
-//         let i = 0;
-//         element.textContent = '';
-        
-//         function type() {
-//           if (i < text.length) {
-//             const char = text.charAt(i);
-//             element.textContent += char;
-//             i++;
-            
-//             // Variable speed for more realistic typing
-//             // Faster for spaces, slower for punctuation
-//             let speed = minSpeed;
-//             if (char === ' ' || char === '.') {
-//               speed = minSpeed + Math.random() * 50;
-//             } else if (char === ',' || char === ';' || char === ':') {
-//               speed = minSpeed + Math.random() * 100;
-//             } else {
-//               speed = minSpeed + Math.random() * (maxSpeed - minSpeed);
-//             }
-            
-//             setTimeout(type, speed);
-//           }
-//         }
-        
-//         // Small delay before starting
-//         setTimeout(type, 500);
-//       }
-
-//       function copyToClipboard() {
-//         const endpointUrl = document.getElementById('endpointUrl').textContent;
-//         if (navigator.clipboard && navigator.clipboard.writeText) {
-//           navigator.clipboard.writeText(endpointUrl).then(() => {
-//             const notification = document.getElementById('copyNotification');
-//             if (notification) {
-//               notification.classList.add('show');
-//               setTimeout(() => {
-//                 notification.classList.remove('show');
-//               }, 3000);
-//             }
-//           }).catch(err => {
-//             console.error('Failed to copy: ', err);
-//             fallbackCopy(endpointUrl);
-//           });
-//         } else {
-//           fallbackCopy(endpointUrl);
-//         }
-//       }
-
-//       function fallbackCopy(text) {
-//         const textArea = document.createElement('textarea');
-//         textArea.value = text;
-//         textArea.style.position = 'fixed';
-//         textArea.style.opacity = '0';
-//         document.body.appendChild(textArea);
-//         textArea.select();
-//         try {
-//           document.execCommand('copy');
-//           const notification = document.getElementById('copyNotification');
-//           if (notification) {
-//             notification.classList.add('show');
-//             setTimeout(() => {
-//               notification.classList.remove('show');
-//             }, 3000);
-//           }
-//         } catch (err) {
-//           console.error('Fallback copy failed', err);
-//           alert('Failed to copy URL to clipboard. Please copy it manually: ' + text);
-//         }
-//         document.body.removeChild(textArea);
-//       }
-
-//       // Initialize everything when DOM is ready
-//       function init() {
-//         // Always use dark theme
-//         currentTheme = 'dark';
-        
-//         // Set theme first (always dark)
-//         initTheme();
-        
-//         // Start typing effect
-//         const typingElement = document.getElementById('typing-text');
-//         if (typingElement) {
-//           const textToType = 'Hello, good luck, copy this and go to the heart of the internet.';
-//           // Typing with variable speed (30-120ms) for realistic terminal effect
-//           typeText(typingElement, textToType, 30, 120);
-//         }
-//       }
-
-//       // Wait for DOM to be ready
-//       if (document.readyState === 'loading') {
-//         document.addEventListener('DOMContentLoaded', init);
-//       } else {
-//         // DOM is already loaded
-//         init();
-//       }
-      
-//       // Expose copyToClipboard function globally
-//       window.copyToClipboard = copyToClipboard;
-//     </script>
-//   </body>
-//   </html>`;
-  
-//   return new Response(html, {
-//     headers: {
-//       'Content-Type': 'text/html; charset=utf-8',
-//       'Cache-Control': 'public, max-age=3600'
-//     }
-//   });
-// }
-
-// // Serve detailed DNS encoding explanation
-// function serveDNSEncodingExplanation() {
-//   const html = `
-//   <!DOCTYPE html>
-//   <html lang="en">
-//   <head>
-//     <meta charset="UTF-8">
-//     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-//     <title>DNS Query Encoding in DoH - Explained</title>
-//     <link rel="preconnect" href="https://fonts.googleapis.com">
-//     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-//     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
-//     <style>
-//       :root {
-//         --primary: #3b82f6;
-//         --primary-dark: #2563eb;
-//         --secondary: #10b981;
-//         --dark: #1e293b;
-//         --light: #f8fafc;
-//         --gray: #94a3b8;
-//         --border: #e2e8f0;
-//       }
-      
-//       * {
-//         margin: 0;
-//         padding: 0;
-//         box-sizing: border-box;
-//       }
-      
-//       body {
-//         font-family: 'Share Tech Mono', monospace;
-//         line-height: 1.6;
-//         color: var(--dark);
-//         background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-//         min-height: 100vh;
-//         padding: 20px;
-//       }
-      
-//       .container {
-//         max-width: 1000px;
-//         margin: 0 auto;
-//       }
-      
-//       header {
-//         text-align: center;
-//         padding: 40px 20px;
-//         margin-bottom: 30px;
-//       }
-      
-//       h1 {
-//         font-size: 2.5rem;
-//         margin-bottom: 15px;
-//         color: var(--dark);
-//         background: linear-gradient(90deg, var(--primary), var(--secondary));
-//         -webkit-background-clip: text;
-//         -webkit-text-fill-color: transparent;
-//         background-clip: text;
-//       }
-      
-//       .subtitle {
-//         font-size: 1.2rem;
-//         color: var(--gray);
-//         max-width: 700px;
-//         margin: 0 auto 25px;
-//       }
-      
-//       .card {
-//         background: white;
-//         border-radius: 16px;
-//         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
-//         padding: 30px;
-//         margin-bottom: 30px;
-//       }
-      
-//       h2 {
-//         font-size: 1.8rem;
-//         margin-bottom: 20px;
-//         color: var(--dark);
-//         padding-bottom: 10px;
-//         border-bottom: 2px solid var(--border);
-//       }
-      
-//       h3 {
-//         font-size: 1.4rem;
-//         margin: 25px 0 15px;
-//         color: var(--dark);
-//       }
-      
-//       ul, ol {
-//         margin-left: 30px;
-//         margin-bottom: 20px;
-//       }
-      
-//       li {
-//         margin-bottom: 10px;
-//       }
-      
-//       .code-block {
-//         background: #0f172a;
-//         color: white;
-//         border-radius: 10px;
-//         padding: 20px;
-//         margin: 15px 0;
-//         font-family: 'Share Tech Mono', monospace;
-//         font-size: 0.95rem;
-//         overflow-x: auto;
-//       }
-      
-//       .back-link {
-//         display: inline-block;
-//         background: var(--primary);
-//         color: white;
-//         padding: 10px 20px;
-//         border-radius: 8px;
-//         text-decoration: none;
-//         font-weight: 500;
-//         margin-top: 15px;
-//         transition: background 0.3s ease;
-//       }
-      
-//       .back-link:hover {
-//         background: var(--primary-dark);
-//       }
-      
-//       footer {
-//         text-align: center;
-//         padding: 30px 0;
-//         color: var(--gray);
-//         font-size: 0.9rem;
-//       }
-//     </style>
-//   </head>
-//   <body>
-//     <div class="container">
-//       <header>
-//         <h1>DNS Query Encoding in DNS-over-HTTPS</h1>
-//         <p class="subtitle">Understanding why DNS queries must be base64url-encoded in DoH GET requests</p>
-//       </header>
-      
-//       <div class="card">
-//         <h2>Why DNS Queries Must Be Encoded</h2>
-        
-//         <p>When using DNS-over-HTTPS with GET requests, DNS queries must be encoded using base64url encoding. This requirement exists for several important technical reasons:</p>
-        
-//         <h3>1. Binary Data in URLs</h3>
-//         <p>DNS queries are binary data structures that contain information about the domain name being queried, the type of record requested (A, AAAA, MX, etc.), and other metadata. URLs, however, are text-based and have restrictions on what characters they can contain.</p>
-        
-//         <h3>2. URL Safety</h3>
-//         <p>Standard Base64 encoding uses characters like '+' and '/' which have special meanings in URLs:</p>
-//         <ul>
-//           <li>'+' is interpreted as a space in URL query parameters</li>
-//           <li>'/' is interpreted as a path separator</li>
-//         </ul>
-        
-//         <p>Base64url encoding solves this by:</p>
-//         <ul>
-//           <li>Replacing '+' with '-'</li>
-//           <li>Replacing '/' with '_'</li>
-//           <li>Optionally omitting padding '=' characters</li>
-//         </ul>
-        
-//         <h3>3. RFC 8484 Compliance</h3>
-//         <p>The DNS-over-HTTPS specification (RFC 8484) mandates the use of base64url encoding for DNS queries transmitted via GET requests to ensure interoperability between different DoH implementations.</p>
-        
-//         <h2>Example Encoding Process</h2>
-//         <ol>
-//           <li>A DNS query for "example.com" is represented as binary data</li>
-//           <li>This binary data is encoded using base64url encoding</li>
-//           <li>The resulting string is safe to use in a URL query parameter</li>
-//         </ol>
-        
-//         <div class="code-block">
-// Binary DNS Query → Base64url Encoding → URL Parameter
-// [0x12, 0x34, ...] → "q80BAAAB..." → ?dns=q80BAAAB...</div>
-        
-//         <h2>When Encoding is Required</h2>
-//         <ul>
-//           <li><strong>GET Requests</strong>: DNS queries MUST be base64url-encoded</li>
-//           <li><strong>POST Requests</strong>: DNS queries are sent as binary data in the request body (no encoding needed)</li>
-//         </ul>
-        
-//         <h2>Tools for Encoding</h2>
-//         <p>Many programming languages provide built-in functions for base64url encoding:</p>
-//         <ul>
-//           <li>JavaScript: Custom function using <code>btoa()</code> with character replacements</li>
-//           <li>Python: <code>base64.urlsafe_b64encode()</code></li>
-//           <li>Command-line: <code>openssl base64 -url</code></li>
-//         </ul>
-        
-//         <p>This encoding requirement ensures that DNS queries can be safely transmitted over HTTPS while maintaining compatibility with web standards and the DoH protocol specification.</p>
-        
-//         <h2>Ad-Blocking Support</h2>
-//         <p>This DoH proxy includes support for ad-blocking DNS providers. When using this service, DNS queries are automatically distributed across multiple providers including specialized ad-blocking services like AdGuard, ControlD, Mullvad, and NextDNS. These providers block ads, trackers, and malicious domains at the DNS level, providing an additional layer of privacy and security.</p>
-        
-//         <a href="/" class="back-link">← Back to Main Page</a>
-//       </div>
-      
-//       <footer>
-//         <p>High-Performance DoH Proxy Worker | Powered by Cloudflare Workers</p>
-//       </footer>
-//     </div>
-//   </body>
-//   </html>`;
-  
-//   return new Response(html, {
-//     headers: {
-//       'Content-Type': 'text/html; charset=utf-8',
-//       'Cache-Control': 'public, max-age=3600'
-//     }
-//   });
-// }
-
-// // Handle CORS preflight requests
-// function handleCORS() {
-//   return new Response(null, {
-//     status: 204,
-//     headers: {
-//       'Access-Control-Allow-Origin': '*',
-//       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-//       'Access-Control-Allow-Headers': 'Content-Type, Accept',
-//       'Access-Control-Max-Age': '86400'
-//     }
-//   });
-// }
-
-// // Weighted random selection of DoH provider
-// function selectProvider(providers) {
-//   const totalWeight = providers.reduce((sum, provider) => sum + provider.weight, 0);
-//   let random = Math.random() * totalWeight;
-  
-//   for (const provider of providers) {
-//     random -= provider.weight;
-//     if (random <= 0) {
-//       return provider;
-//     }
-//   }
-  
-//   // Fallback to first provider
-//   return providers[0];
-// }
-
-// // Try fallback providers when primary fails
-// async function tryFallbackProviders(request, url, failedProvider, DOH_PROVIDERS, CACHE_TTL, requestBody, isPost) {
-//   const fallbackProviders = DOH_PROVIDERS.filter(p => p.name !== failedProvider.name);
-  
-//   for (const provider of fallbackProviders) {
-//     try {
-//       const response = await fetchFromProvider(
-//         provider,
-//         request,
-//         url,
-//         requestBody,
-//         isPost
-//       );
-
-//       if (response.ok) {
-//         return buildDnsResponse(response, provider, CACHE_TTL);
-//       }
-//     } catch (error) {
-//       continue;
-//     }
-//   }
-  
-//   // All providers failed
-//   return new Response('All DNS providers are unavailable', { 
-//     status: 503,
-//     headers: {
-//       'Access-Control-Allow-Origin': '*',
-//       'Content-Type': 'text/plain'
-//     }
-//   });
-// }
-
-
-
-
-// function parseProviderItem(provider) {
-//   if (typeof provider === 'string') {
-//     try {
-//       const parsed = JSON.parse(provider);
-//       if (parsed && parsed.url) return { name: parsed.name || parsed.url, url: parsed.url, weight: parsed.weight || 10 };
-//     } catch {}
-//     return { name: provider, url: provider, weight: 10 };
-//   }
-//   if (provider && provider.url) return { name: provider.name || provider.url, url: provider.url, weight: provider.weight || 10 };
-//   return null;
-// }
-// function getConfig(env) {
-//   const CACHE_TTL = env.CACHE_TTL? parseInt(env.CACHE_TTL) : 300;
-//   let DOH_PROVIDERS;
-//   if (env.PROVIDERS) {
-//     try {
-//       let providers = typeof env.PROVIDERS === 'string'? JSON.parse(env.PROVIDERS) : env.PROVIDERS;
-//       if (Array.isArray(providers)) DOH_PROVIDERS = providers.map(parseProviderItem).filter(p=>p&&p.url);
-//     } catch {}
-//   }
-//   if (!DOH_PROVIDERS || DOH_PROVIDERS.length === 0) {
-//     DOH_PROVIDERS = [
-//       { name: "Cloudflare", url: "https://cloudflare-dns.com/dns-query", weight: 50 },
-//       { name: "Google", url: "https://dns.google/dns-query", weight: 30 },
-//       { name: "Quad9", url: "https://dns.quad9.net/dns-query", weight: 20 }
-//     ];
-//   }
-//   return { CACHE_TTL, DOH_PROVIDERS };
-// }
-
-// export default { async fetch(req, env, ctx) { return handleRequest(req, env, ctx); } };
-
-// async function handleRequest(request, env, ctx) {
-//   const { CACHE_TTL, DOH_PROVIDERS } = getConfig(env);
-//   const url = new URL(request.url);
-//   if (url.pathname === '/') return new Response('Worker OK - Use /dns-query', { status: 200 });
-//   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Accept' } });
-//   if (url.pathname!== '/dns-query') return new Response('Use /dns-query', { status: 400 });
-//   if (request.method === 'GET' &&!url.searchParams.has('dns')) return new Response('Missing dns param', { status: 400 });
-
-//   const isPost = request.method === 'POST';
-//   const requestBody = isPost? await request.arrayBuffer() : undefined;
-//   const selected = DOH_PROVIDERS[Math.floor(Math.random()*DOH_PROVIDERS.length)];
-
-//   // تلاش
-//   for (const provider of DOH_PROVIDERS) {
-//     try {
-//       const resp = await fetchFromProvider(provider, request, url, requestBody, isPost);
-//       if (resp.ok) return buildResp(resp, provider, CACHE_TTL);
-//     } catch (e) { console.log(`Fail ${provider.name}: ${e.message}`); }
-//   }
-//   return new Response('All DNS providers are unavailable - ' + DOH_PROVIDERS.map(p=>p.name).join(','), { status: 503, headers: { 'Access-Control-Allow-Origin': '*' } });
-// }
-
-// async function fetchFromProvider(provider, request, url, requestBody, isPost) {
-//   // مهم: برای GET اصلا body نفرست
-//   const targetUrl = provider.url + url.search;
-//   const controller = new AbortController();
-//   const t = setTimeout(()=>controller.abort(), 4000);
-//   const init = {
-//     method: request.method,
-//     headers: { 'Accept': 'application/dns-message',...(isPost? {'Content-Type':'application/dns-message'} : {}) },
-//     signal: controller.signal,
-//     redirect: 'follow'
-//   };
-//   if (isPost && requestBody) init.body = requestBody;
-
-//   try { return await fetch(targetUrl, init); }
-//   finally { clearTimeout(t); }
-// }
-
-// function buildResp(response, provider, ttl) {
-//   const h = new Headers(response.headers);
-//   h.set('Access-Control-Allow-Origin', '*');
-//   h.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-//   h.set('Cache-Control', `public, max-age=${ttl}`);
-//   h.set('X-Provider', provider.name);
-//   return new Response(response.body, { status: response.status, headers: h });
-// } 
-
-
-
-
-
-// export default {
-//   async fetch(request, env, ctx) {
-//     const url = new URL(request.url);
-
-//     // Landing page
-//     if (url.pathname === "/" || url.pathname === "/index.html") {
-//       return new Response(landingPage, {
-//         headers: { "Content-Type": "text/html; charset=utf-8" }
-//       });
-//     }
-
-//     if (url.pathname!== "/dns-query") {
-//       return new Response("Not Found - Use /dns-query", { status: 404 });
-//     }
-
-//     // CORS preflight
-//     if (request.method === "OPTIONS") {
-//       return new Response(null, { headers: corsHeaders });
-//     }
-
-//     if (request.method!== "GET" && request.method!== "POST") {
-//       return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
-//     }
-
-//     try {
-//       const config = getConfig(env);
-//       const dnsQuery = await getDnsQuery(request);
-
-//       if (!dnsQuery) {
-//         return new Response("Missing DNS query", { status: 400, headers: corsHeaders });
-//       }
-
-//       // Try cache first
-//       const cacheKey = new Request(url.toString(), request);
-//       const cache = caches.default;
-//       let response = await cache.match(cacheKey);
-//       if (response) {
-//         return response;
-//       }
-
-//       response = await proxyWithFailover(dnsQuery, request.method, config);
-
-//       // Cache successful responses
-//       if (response.status === 200) {
-//         ctx.waitUntil(cache.put(cacheKey, response.clone()));
-//       }
-
-//       return response;
-
-//     } catch (err) {
-//       return new Response(`Error: ${err.message}`, { status: 500, headers: corsHeaders });
-//     }
-//   }
-// }
-
-// const corsHeaders = {
-//   "Access-Control-Allow-Origin": "*",
-//   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-//   "Access-Control-Allow-Headers": "Content-Type,Accept",
-//   "Access-Control-Max-Age": "86400",
-// };
-
-// function getConfig(env) {
-//   try {
-//     const providers = JSON.parse(env.PROVIDERS || "[]");
-//     return {
-//       providers: providers,
-//       cacheTtl: parseInt(env.CACHE_TTL || "300"),
-//     };
-//   } catch {
-//     // fallback if vars broken
-//     return {
-//       providers: [
-//         { name: "Cloudflare", url: "https://cloudflare-dns.com/dns-query", weight: 50 },
-//         { name: "Google", url: "https://dns.google/dns-query", weight: 50 },
-//       ],
-//       cacheTtl: 300,
-//     };
-//   }
-// }
-
-// async function getDnsQuery(request) {
-//   const url = new URL(request.url);
-//   if (request.method === "GET") {
-//     const dnsParam = url.searchParams.get("dns");
-//     if (!dnsParam) return null;
-//     // Validate base64url
-//     try {
-//       // Convert base64url to bytes to validate
-//       const base64 = dnsParam.replace(/-/g, '+').replace(/_/g, '/');
-//       atob(base64);
-//       return dnsParam;
-//     } catch {
-//       return null;
-//     }
-//   } else {
-//     // POST - body is the DNS query
-//     const buf = await request.clone().arrayBuffer();
-//     if (buf.byteLength === 0) return null;
-//     return buf;
-//   }
-// }
-
-// function pickProviders(providers) {
-//   // Weighted shuffle
-//   const weighted = [];
-//   for (const p of providers) {
-//     const w = p.weight || 10;
-//     for (let i = 0; i < w; i++) weighted.push(p);
-//   }
-//   // Fisher-Yates shuffle
-//   for (let i = weighted.length - 1; i > 0; i--) {
-//     const j = Math.floor(Math.random() * (i + 1));
-//     [weighted[i], weighted[j]] = [weighted[j], weighted[i]];
-//   }
-//   // Unique by name, keep order
-//   const seen = new Set();
-//   const result = [];
-//   for (const p of weighted) {
-//     if (!seen.has(p.name)) {
-//       seen.add(p.name);
-//       result.push(p);
-//     }
-//   }
-//   return result;
-// }
-
-// async function fetchFromProvider(provider, dnsQuery, method, timeoutMs = 2000) {
-//   const controller = new AbortController();
-//   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-//   try {
-//     let reqUrl = provider.url;
-//     let body = undefined;
-//     let headers = {
-//       "Accept": "application/dns-message",
-//       "Content-Type": "application/dns-message",
-//     };
-
-//     if (typeof dnsQuery === "string") {
-//       // GET
-//       reqUrl = `${provider.url}?dns=${dnsQuery}`;
-//       method = "GET";
-//     } else {
-//       // POST
-//       body = dnsQuery.slice(0); // clone buffer
-//       method = "POST";
-//     }
-
-//     const res = await fetch(reqUrl, {
-//       method,
-//       headers,
-//       body,
-//       signal: controller.signal,
-//     });
-
-//     if (!res.ok) throw new Error(`Upstream ${provider.name} returned ${res.status}`);
-
-//     const data = await res.arrayBuffer();
-//     return buildResp(data, provider.name);
-
-//   } finally {
-//     clearTimeout(timeout);
-//   }
-// }
-
-// function buildResp(data, providerName) {
-//   return new Response(data, {
-//     status: 200,
-//     headers: {
-//       "Content-Type": "application/dns-message",
-//       "Content-Length": data.byteLength.toString(),
-//       "X-Provider": providerName,
-//       "Cache-Control": "public, max-age=300",
-//       "Access-Control-Allow-Origin": "*",
-//       "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-//       "Access-Control-Allow-Headers": "Content-Type,Accept",
-//     }
-//   });
-// }
-
-// async function proxyWithFailover(dnsQuery, originalMethod, config) {
-//   const ordered = pickProviders(config.providers);
-//   const errors = [];
-
-//   for (const provider of ordered) {
-//     try {
-//       const res = await fetchFromProvider(provider, dnsQuery, originalMethod);
-//       return res;
-//     } catch (e) {
-//       errors.push(`${provider.name}:${e.message}`);
-//       console.log(`Failover: ${provider.name} failed - ${e.message}`);
-//       continue;
-//     }
-//   }
-
-//   return new Response(`All DNS providers are unavailable - ${errors.join(", ")}`, {
-//     status: 503,
-//     headers: corsHeaders
-//   });
-// }
-
-// const landingPage = `<!DOCTYPE html><html><head><title>DoH Proxy Active</title></head><body style="font-family:sans-serif;text-align:center;padding:50px">
-// <h1>✅ DoH Proxy is Running</h1>
-// <p>Endpoint: <code>/dns-query</code></p>
-// <p>Test: <code>?dns=q80BAAABAAAAAAAAA3d3dwdleGFtcGxlA2NvbQAAAQAB</code> should return 200</p>
-// <p>X-Provider header shows which upstream served you</p>
-// </body></html>`;
-
+  return { CACHE_TTL, DOH_PROVIDERS };
+}
 
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-
-    // Landing page
-    if (url.pathname === "/" || url.pathname === "/index.html") {
-      return new Response(landingPage, {
-        headers: { "Content-Type": "text/html; charset=utf-8" }
-      });
-    }
-
-    if (url.pathname!== "/dns-query") {
-      return new Response("Not Found - Use /dns-query", { status: 404 });
-    }
-
-    // CORS preflight
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
-    }
-
-    if (request.method!== "GET" && request.method!== "POST") {
-      return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
-    }
-
-    try {
-      const config = getConfig(env);
-      const dnsQuery = await getDnsQuery(request);
-
-      if (!dnsQuery) {
-        return new Response("Missing DNS query", { status: 400, headers: corsHeaders });
-      }
-
-      // Try cache first
-      const cacheKey = new Request(url.toString(), request);
-      const cache = caches.default;
-      let response = await cache.match(cacheKey);
-      if (response) {
-        return response;
-      }
-
-      response = await proxyWithFailover(dnsQuery, request.method, config);
-
-      // Cache successful responses
-      if (response.status === 200) {
-        ctx.waitUntil(cache.put(cacheKey, response.clone()));
-      }
-
-      return response;
-
-    } catch (err) {
-      return new Response(`Error: ${err.message}`, { status: 500, headers: corsHeaders });
-    }
+    return handleRequest(request, env, ctx);
   }
-}
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,Accept",
-  "Access-Control-Max-Age": "86400",
 };
 
-function getConfig(env) {
-  try {
-    const providers = JSON.parse(env.PROVIDERS || "[]");
-    return {
-      providers: providers,
-      cacheTtl: parseInt(env.CACHE_TTL || "300"),
-    };
-  } catch {
-    return {
-      providers: [
-        { name: "Cloudflare", url: "https://cloudflare-dns.com/dns-query", weight: 50 },
-        { name: "Google", url: "https://dns.google/dns-query", weight: 50 },
-      ],
-      cacheTtl: 300,
-    };
-  }
-}
-
-async function getDnsQuery(request) {
+async function handleRequest(request, env, ctx) {
+  const { CACHE_TTL, DOH_PROVIDERS } = getConfig(env);
   const url = new URL(request.url);
-  if (request.method === "GET") {
-    const dnsParam = url.searchParams.get("dns");
-    if (!dnsParam) return null;
-    try {
-      const base64 = dnsParam.replace(/-/g, '+').replace(/_/g, '/');
-      atob(base64);
-      return dnsParam;
-    } catch {
-      return null;
-    }
-  } else {
-    const buf = await request.clone().arrayBuffer();
-    if (buf.byteLength === 0) return null;
-    return buf;
+  
+  // Serve landing page for root path
+  if (url.pathname === '/') {
+    return serveLandingPage(request, DOH_PROVIDERS);
   }
-}
+  
+  // Serve DNS encoding explanation
+  if (url.pathname === '/dns-encoding') {
+    return serveDNSEncodingExplanation();
+  }
+  
+    // Handle CORS preflight requests
+    if (request.method === 'OPTIONS') {
+    return handleCORS();
+  }
 
-function pickProviders(providers) {
-  const weighted = [];
-  for (const p of providers) {
-    const w = p.weight || 10;
-    for (let i = 0; i < w; i++) weighted.push(p);
+  // Validate DNS request
+  if (url.pathname !== '/dns-query') {
+    return new Response('Invalid endpoint. Use /dns-query', { status: 400 });
   }
-  for (let i = weighted.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [weighted[i], weighted[j]] = [weighted[j], weighted[i]];
-  }
-  const seen = new Set();
-  const result = [];
-  for (const p of weighted) {
-    if (!seen.has(p.name)) {
-      seen.add(p.name);
-      result.push(p);
-    }
-  }
-  return result;
-}
 
-async function fetchFromProvider(provider, dnsQuery, method, timeoutMs = 2000) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  // Check if it's a DNS query (either via query parameter or POST body)
+  const isGet = request.method === 'GET';
+  const isPost = request.method === 'POST';
+  
+  if (!isGet && !isPost) {
+    return new Response('Method not allowed. Use GET or POST.', { status: 405 });
+  }
 
+  // Check for DNS query parameter in GET requests
+  if (isGet && !url.searchParams.has('dns')) {
+    return new Response('Missing DNS query parameter', { status: 400 });
+  }
+
+  // Select the best DoH provider based on weighted random selection
+  const selectedProvider = selectProvider(DOH_PROVIDERS);
+  
+  // Clone request to preserve body for fallback if needed
+  const requestBody = isPost ? await request.arrayBuffer() : null;
+  
   try {
-    let reqUrl = provider.url;
-    let body = undefined;
-    let headers = {
-      "Accept": "application/dns-message",
-      "Content-Type": "application/dns-message",
-    };
+    const response = await fetchFromProvider(
+      selectedProvider,
+      request,
+      url,
+      requestBody,
+      isPost
+    );
 
-    if (typeof dnsQuery === "string") {
-      reqUrl = `${provider.url}?dns=${dnsQuery}`;
-      method = "GET";
-    } else {
-      body = dnsQuery.slice(0);
-      method = "POST";
+    if (response.ok) {
+      return buildDnsResponse(response, selectedProvider, CACHE_TTL);
     }
-
-    const res = await fetch(reqUrl, {
-      method,
-      headers,
-      body,
-      signal: controller.signal,
-    });
-
-    if (!res.ok) throw new Error(`Upstream ${provider.name} returned ${res.status}`);
-
-    const data = await res.arrayBuffer();
-    return buildResp(data, provider.name);
-
-  } finally {
-    clearTimeout(timeout);
+  } catch (error) {
+    // Network error from primary provider — try fallbacks below
   }
+
+  return await tryFallbackProviders(
+    request,
+    url,
+    selectedProvider,
+    DOH_PROVIDERS,
+    CACHE_TTL,
+    requestBody,
+    isPost
+  );
 }
 
-function buildResp(data, providerName) {
-  return new Response(data, {
-    status: 200,
+function buildUpstreamHeaders(isPost) {
+  const headers = new Headers();
+  headers.set('Accept', 'application/dns-message');
+  if (isPost) {
+    headers.set('Content-Type', 'application/dns-message');
+  }
+  headers.set('User-Agent', 'DoH-Proxy-Worker/1.0');
+  return headers;
+}
+
+async function fetchFromProvider(provider, request, url, requestBody, isPost) {
+  const targetUrl = provider.url + url.search;
+  const upstreamRequest = new Request(targetUrl, {
+    method: request.method,
+    headers: buildUpstreamHeaders(isPost),
+    body: requestBody,
+    redirect: 'follow'
+  });
+  return fetch(upstreamRequest);
+}
+
+function buildDnsResponse(response, provider, CACHE_TTL) {
+  const responseHeaders = new Headers(response.headers);
+  responseHeaders.set('Access-Control-Allow-Origin', '*');
+  responseHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  responseHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
+  responseHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
+  responseHeaders.set('Expires', new Date(Date.now() + CACHE_TTL * 1000).toUTCString());
+  responseHeaders.set('X-Provider', provider.name);
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeaders
+  });
+}
+
+// Serve a beautiful landing page for the root path
+function serveLandingPage(request, PROVIDERS) {
+  const workerUrl = new URL(request.url);
+  workerUrl.pathname = '/dns-query';
+  const dnsEndpoint = workerUrl.toString();
+  
+  const html = `
+  <!DOCTYPE html>
+  <html lang="en" dir="ltr" data-theme="dark">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Performance DoH Proxy</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <script>
+      // Prevent flash of unstyled content - set theme immediately
+      (function() {
+        // Always use dark theme
+        var theme = 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.lang = 'en';
+        document.documentElement.dir = 'ltr';
+      })();
+    </script>
+    <style>
+      :root {
+        --primary: #00ff41;
+        --primary-dark: #00cc33;
+        --secondary: #00ff41;
+        --kali-green: #00ff41;
+        --kali-dark: #0a0e27;
+        --kali-bg: #0a0e27;
+        --kali-card: #1a1f3a;
+        --kali-border: #00ff41;
+        --kali-text: #00ff41;
+        --kali-text-dim: #00cc33;
+        --kali-shadow: rgba(0, 255, 65, 0.3);
+      }
+      
+      [data-theme="dark"] {
+        --bg-primary: #0a0e27;
+        --bg-secondary: #1a1f3a;
+        --bg-card: #1a1f3a;
+        --bg-card-hover: #252b4a;
+        --text-primary: #00ff41;
+        --text-secondary: #00cc33;
+        --text-muted: #00aa22;
+        --border-color: #00ff41;
+        --shadow: rgba(0, 255, 65, 0.2);
+        --gradient-start: #0a0e27;
+        --gradient-end: #0a0e27;
+      }
+      
+      [data-theme="light"] {
+        --bg-primary: #0a0e27;
+        --bg-secondary: #1a1f3a;
+        --bg-card: #1a1f3a;
+        --bg-card-hover: #252b4a;
+        --text-primary: #00ff41;
+        --text-secondary: #00cc33;
+        --text-muted: #00aa22;
+        --border-color: #00ff41;
+        --shadow: rgba(0, 255, 65, 0.2);
+        --gradient-start: #0a0e27;
+        --gradient-end: #0a0e27;
+      }
+      
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: 'Share Tech Mono', monospace;
+        line-height: 1.6;
+        color: var(--kali-text);
+        background: var(--kali-bg);
+        min-height: 100vh;
+        padding: 20px;
+        transition: background 0.3s ease, color 0.3s ease;
+        position: relative;
+        overflow-x: hidden;
+      }
+      
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: 
+          repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(0, 255, 65, 0.03) 2px,
+            rgba(0, 255, 65, 0.03) 4px
+          );
+        pointer-events: none;
+        z-index: 0;
+      }
+      
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        position: relative;
+        z-index: 1;
+      }
+      
+      .top-controls {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1001;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      
+      .social-links {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      
+      .social-link {
+        width: 50px;
+        height: 50px;
+        border-radius: 0;
+        border: 2px solid var(--kali-border);
+        background: var(--kali-card);
+        color: var(--kali-text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+        font-size: 1.3rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 0 10px var(--kali-shadow);
+        position: relative;
+        z-index: 1002;
+      }
+      
+      .social-link:hover {
+        transform: translateY(-3px) scale(1.1);
+        border-color: var(--kali-text);
+        background: var(--kali-text);
+        color: var(--kali-bg);
+        box-shadow: 0 0 20px var(--kali-text);
+      }
+      
+      .social-link.github:hover {
+        background: var(--kali-text);
+        border-color: var(--kali-text);
+      }
+      
+      .social-link.telegram:hover {
+        background: var(--kali-text);
+        border-color: var(--kali-text);
+      }
+      
+      header {
+        text-align: center;
+        padding: 40px 20px;
+        margin-bottom: 30px;
+      }
+      
+      .kali-banner {
+        font-family: 'Share Tech Mono', monospace;
+        color: var(--kali-text);
+        text-align: center;
+        margin: 20px auto;
+        font-size: 0.7rem;
+        line-height: 1.2;
+        text-shadow: 0 0 10px var(--kali-text);
+        white-space: pre;
+        overflow-x: auto;
+        max-width: 100%;
+      }
+      
+      @media (max-width: 768px) {
+        .kali-banner {
+          font-size: 0.5rem;
+        }
+      }
+      
+      h1 {
+        font-size: 2.8rem;
+        margin-bottom: 15px;
+        color: var(--kali-text);
+        text-shadow: 0 0 10px var(--kali-text), 0 0 20px var(--kali-text);
+        font-family: 'Share Tech Mono', monospace;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+      }
+      
+      .subtitle {
+        font-size: 1.3rem;
+        color: var(--kali-text-dim);
+        max-width: 700px;
+        margin: 0 auto 25px;
+        font-family: 'Share Tech Mono', monospace;
+        text-shadow: 0 0 5px var(--kali-text-dim);
+        min-height: 2em;
+      }
+      
+      .developer-credit {
+        font-size: 1rem;
+        color: var(--kali-text-dim);
+        max-width: 700px;
+        margin: 15px auto 25px;
+        font-family: 'Share Tech Mono', monospace;
+        text-shadow: 0 0 8px var(--kali-text-dim);
+        text-align: center;
+        opacity: 0.8;
+      }
+      
+      .typing-effect {
+        display: inline-block;
+        font-family: 'Share Tech Mono', monospace;
+        color: var(--kali-text);
+        text-shadow: 0 0 10px var(--kali-text);
+      }
+      
+      .typing-cursor {
+        display: inline-block;
+        width: 2px;
+        height: 1.2em;
+        background: var(--kali-text);
+        margin-left: 3px;
+        animation: blink 1s infinite;
+        vertical-align: middle;
+        box-shadow: 0 0 10px var(--kali-text);
+      }
+      
+      @keyframes blink {
+        0%, 50% {
+          opacity: 1;
+        }
+        51%, 100% {
+          opacity: 0;
+        }
+      }
+      
+      .endpoint-card {
+        background: var(--kali-card);
+        color: var(--kali-text);
+        border-radius: 0;
+        padding: 30px;
+        margin-bottom: 40px;
+        text-align: center;
+        box-shadow: 0 0 20px var(--kali-shadow);
+        border: 2px solid var(--kali-border);
+        position: relative;
+      }
+      
+      .endpoint-card::before {
+        content: '>>>';
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: var(--kali-text);
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 1.2rem;
+      }
+      
+      .endpoint-card h2 {
+        font-size: 2rem;
+        margin-bottom: 15px;
+        color: var(--kali-text);
+        text-shadow: 0 0 10px var(--kali-text);
+        font-family: 'Share Tech Mono', monospace;
+        text-transform: uppercase;
+      }
+      
+      .endpoint-card p {
+        font-size: 1.2rem;
+        margin-bottom: 25px;
+        color: var(--kali-text-dim);
+        font-family: 'Share Tech Mono', monospace;
+      }
+      
+      .endpoint-url {
+        background: var(--kali-bg);
+        border-radius: 0;
+        padding: 20px;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 1.1rem;
+        margin: 25px 0;
+        word-break: break-all;
+        position: relative;
+        text-align: left;
+        border: 2px solid var(--kali-border);
+        color: var(--kali-text);
+        box-shadow: inset 0 0 10px var(--kali-shadow);
+      }
+      
+      .copy-btn {
+        background: var(--kali-bg);
+        color: var(--kali-text);
+        border: 2px solid var(--kali-border);
+        padding: 12px 25px;
+        border-radius: 0;
+        font-weight: normal;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 10px;
+        box-shadow: 0 0 10px var(--kali-shadow);
+        font-family: 'Share Tech Mono', monospace;
+        text-transform: uppercase;
+      }
+      
+      .copy-btn:hover {
+        background: var(--kali-text);
+        color: var(--kali-bg);
+        transform: translateY(-2px);
+        box-shadow: 0 0 20px var(--kali-text);
+      }
+      
+      .copy-btn:active {
+        transform: translateY(0);
+      }
+      
+      .card {
+        background: var(--kali-card);
+        border-radius: 0;
+        box-shadow: 0 0 15px var(--kali-shadow);
+        padding: 30px;
+        margin-bottom: 30px;
+        transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+        border: 2px solid var(--kali-border);
+        position: relative;
+      }
+      
+      .card::before {
+        content: '$';
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: var(--kali-text);
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 1.2rem;
+      }
+      
+      .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0 25px var(--kali-text);
+        border-color: var(--kali-text);
+      }
+      
+      h2 {
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+        color: var(--kali-text);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: 'Share Tech Mono', monospace;
+        text-transform: uppercase;
+        text-shadow: 0 0 10px var(--kali-text);
+      }
+      
+      h2 i {
+        color: var(--kali-text);
+      }
+      
+      h3 {
+        color: var(--kali-text);
+        font-family: 'Share Tech Mono', monospace;
+        text-transform: uppercase;
+        text-shadow: 0 0 5px var(--kali-text);
+      }
+      
+      p {
+        color: var(--kali-text-dim);
+        font-family: 'Share Tech Mono', monospace;
+      }
+      
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 25px;
+        margin-bottom: 40px;
+      }
+      
+      .feature {
+        display: flex;
+        gap: 15px;
+      }
+      
+      .feature-icon {
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+        color: white;
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 1.4rem;
+      }
+      
+      .feature-content h3 {
+        margin-bottom: 8px;
+        font-size: 1.3rem;
+      }
+      
+      .providers {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+      }
+      
+      .provider {
+        background: var(--kali-bg);
+        border-radius: 0;
+        padding: 20px;
+        border: 2px solid var(--kali-border);
+        transition: all 0.3s ease;
+        position: relative;
+      }
+      
+      .provider::before {
+        content: '●';
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: var(--kali-text);
+        font-family: 'Share Tech Mono', monospace;
+      }
+      
+      .provider:hover {
+        border-color: var(--kali-text);
+        transform: translateY(-2px);
+        box-shadow: 0 0 15px var(--kali-text);
+      }
+      
+      .provider-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+      
+      .provider-name {
+        font-weight: normal;
+        font-size: 1.1rem;
+        color: var(--kali-text);
+        font-family: 'Share Tech Mono', monospace;
+        text-transform: uppercase;
+      }
+      
+      .provider-weight {
+        background: var(--kali-text);
+        color: var(--kali-bg);
+        padding: 4px 10px;
+        border-radius: 0;
+        font-size: 0.9rem;
+        font-family: 'Share Tech Mono', monospace;
+        border: 1px solid var(--kali-text);
+      }
+      
+      .provider-url {
+        color: var(--kali-text-dim);
+        font-size: 0.9rem;
+        word-break: break-all;
+        font-family: 'Share Tech Mono', monospace;
+      }
+      
+      .provider-description {
+        color: var(--kali-text-dim);
+        font-size: 0.8rem;
+        margin-top: 8px;
+        font-style: normal;
+        font-family: 'Share Tech Mono', monospace;
+      }
+      
+      .usage-examples {
+        background: var(--kali-card);
+        color: var(--kali-text);
+        border-radius: 0;
+        padding: 30px;
+        border: 2px solid var(--kali-border);
+        box-shadow: 0 0 15px var(--kali-shadow);
+      }
+      
+      .usage-examples h2 {
+        color: var(--kali-text);
+        text-shadow: 0 0 10px var(--kali-text);
+      }
+      
+      .usage-examples h3 {
+        color: var(--kali-text);
+        margin-top: 20px;
+        text-shadow: 0 0 5px var(--kali-text);
+      }
+      
+      .usage-examples p {
+        color: var(--kali-text-dim);
+      }
+      
+      .usage-examples a {
+        color: var(--kali-text);
+        text-decoration: underline;
+        text-shadow: 0 0 5px var(--kali-text);
+      }
+      
+      .usage-examples a:hover {
+        color: var(--kali-text);
+        text-shadow: 0 0 10px var(--kali-text);
+      }
+      
+      .usage-examples strong {
+        color: var(--kali-text);
+        text-shadow: 0 0 5px var(--kali-text);
+      }
+      
+      .usage-examples ul li {
+        color: var(--kali-text-dim);
+      }
+      
+      .code-block {
+        background: var(--kali-bg);
+        color: var(--kali-text);
+        border-radius: 0;
+        padding: 20px;
+        margin: 15px 0;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.95rem;
+        overflow-x: auto;
+        border: 2px solid var(--kali-border);
+        box-shadow: inset 0 0 10px var(--kali-shadow);
+        position: relative;
+      }
+      
+      .code-block::before {
+        content: '┌─';
+        position: absolute;
+        top: -2px;
+        left: -2px;
+        color: var(--kali-text);
+        font-family: 'Share Tech Mono', monospace;
+      }
+      
+      .endpoint {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 3px 8px;
+        border-radius: 5px;
+        font-family: 'Share Tech Mono', monospace;
+      }
+      
+      .btn {
+        display: inline-block;
+        background: var(--kali-bg);
+        color: var(--kali-text);
+        padding: 10px 20px;
+        border-radius: 0;
+        text-decoration: none;
+        font-weight: normal;
+        margin-top: 15px;
+        transition: all 0.3s ease;
+        border: 2px solid var(--kali-border);
+        font-family: 'Share Tech Mono', monospace;
+        text-transform: uppercase;
+        box-shadow: 0 0 10px var(--kali-shadow);
+      }
+      
+      .btn:hover {
+        background: var(--kali-text);
+        color: var(--kali-bg);
+        box-shadow: 0 0 20px var(--kali-text);
+      }
+      
+      .copy-notification {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: var(--kali-card);
+        color: var(--kali-text);
+        padding: 15px 25px;
+        border-radius: 0;
+        box-shadow: 0 0 20px var(--kali-text);
+        border: 2px solid var(--kali-border);
+        transform: translateX(200%);
+        transition: transform 0.3s ease;
+        z-index: 1000;
+        font-family: 'Share Tech Mono', monospace;
+        text-transform: uppercase;
+        text-shadow: 0 0 10px var(--kali-text);
+      }
+      
+      .copy-notification.show {
+        transform: translateX(0);
+      }
+      
+      footer {
+        text-align: center;
+        padding: 30px 0;
+        color: var(--kali-text-dim);
+        font-size: 0.9rem;
+        font-family: 'Share Tech Mono', monospace;
+        text-shadow: 0 0 5px var(--kali-text-dim);
+      }
+      
+      @media (max-width: 768px) {
+        h1 {
+          font-size: 2.2rem;
+        }
+        
+        .subtitle {
+          font-size: 1.1rem;
+        }
+        
+        .developer-credit {
+          font-size: 0.9rem;
+        }
+        
+        .card {
+          padding: 20px;
+        }
+        
+        .endpoint-card {
+          padding: 20px;
+        }
+        
+        .top-controls {
+          top: 10px;
+          right: 10px;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        
+        body.rtl .top-controls {
+          right: auto;
+          left: 10px;
+        }
+        
+        .social-link {
+          width: 45px;
+          height: 45px;
+          font-size: 1.1rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top-controls">
+      <div class="social-links">
+        <a href="https://github.com/Darkcode-it/multi-provider-doh-proxy" target="_blank" rel="noopener noreferrer" class="social-link github" title="GitHub">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+        </a>
+        <a href="https://t.me/darkcodeit" target="_blank" rel="noopener noreferrer" class="social-link telegram" title="Telegram">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.941z"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+    
+    <div class="container">
+      <header>
+        <pre class="kali-banner">
+    _    __     _ _     _    _       _ 
+   | |  / /__ _| | |__ | |  (_)___  | |
+   | | / / _ \` | | '_ \| |  | / __| | |
+   | |/ /  __/ | | |_) | |__| \__ \ |_|
+   |_/_/ \___|_|_|_.__/ \____|___/ (_)
+        </pre>
+        <h1>High-Performance DoH Proxy</h1>
+        <p class="subtitle">
+          <span class="typing-effect" id="typing-text"></span>
+          <span class="typing-cursor"></span>
+        </p>
+        <p class="developer-credit">Developed and designed by darkcodeit</p>
+      </header>
+      
+      <div class="endpoint-card">
+        <h2>🚀 Your DoH Endpoint</h2>
+        <p>Use this URL as your DNS-over-HTTPS resolver</p>
+        <div class="endpoint-url" id="endpointUrl">${dnsEndpoint}</div>
+        <button class="copy-btn" onclick="copyToClipboard()">Copy Endpoint URL</button>
+      </div>
+      
+      <div class="features">
+        <div class="card">
+          <div class="feature">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-content">
+              <h3>Lightning Fast</h3>
+              <p>Leverages Cloudflare's global edge network for minimal latency and maximum performance.</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="feature">
+            <div class="feature-icon">🔄</div>
+            <div class="feature-content">
+              <h3>Load Balancing</h3>
+              <p>Intelligently distributes requests across multiple DNS providers based on configurable weights.</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="feature">
+            <div class="feature-icon">🛡️</div>
+            <div class="feature-content">
+              <h3>Automatic Failover</h3>
+              <p>Seamlessly switches to backup providers when primary ones experience issues.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h2>📡 Supported DNS Providers</h2>
+        <p>This proxy supports both general DNS providers and ad-blocking focused providers for enhanced privacy and security.</p>
+        <div class="providers">
+          ${PROVIDERS.map(p => `
+          <div class="provider">
+            <div class="provider-header">
+              <div class="provider-name">${p.name}</div>
+              <div class="provider-weight">${p.weight}%</div>
+            </div>
+            <div class="provider-url">${p.url}</div>
+            ${(p.name === 'AdGuard' || p.name === 'ControlD' || p.name === 'Mullvad' || p.name === 'NextDNS') ? 
+              `<div class="provider-description">Blocks ads, trackers, and malicious domains</div>` : ''}
+          </div>
+          `).join('')}
+        </div>
+      </div>
+      
+      <div class="card usage-examples">
+        <h2>🔧 Usage Examples</h2>
+        <p>Use this worker as a DoH endpoint:</p>
+        
+        <h3>GET Requests</h3>
+        <p>For GET requests, the DNS query must be base64url-encoded as per the <a href="https://tools.ietf.org/html/rfc8484" style="color: #60a5fa;">RFC 8484 specification</a>:</p>
+        <div class="code-block">
+          GET /dns-query?dns=&lt;base64url-encoded-dns-query&gt;
+        </div>
+        <p><strong>Why base64url encoding?</strong></p>
+        <ul class="encoding-list">
+          <li>DNS queries are binary data that cannot be safely transmitted in URLs</li>
+          <li>Base64url encoding converts binary data into a URL-safe string format</li>
+          <li>Standard base64 uses characters like '+' and '/' which have special meaning in URLs</li>
+          <li>Base64url replaces these with '-' and '_' making it URL-safe</li>
+        </ul>
+        <p><a href="/dns-encoding" class="btn">Detailed DNS Encoding Explanation</a></p>
+        <p>Example with curl:</p>
+        <div class="code-block">
+          curl "${dnsEndpoint}?dns=q80BAAABAAAAAAAAA3d3dwdleGFtcGxlA2NvbQAAAQAB"
+        </div>
+        
+        <h3>POST Requests</h3>
+        <p>For POST requests, the DNS query is sent as binary data in the request body:</p>
+        <div class="code-block">
+          POST /dns-query<br>
+          Content-Type: application/dns-message<br>
+          &lt;binary-dns-query&gt;
+        </div>
+        <p>Example with curl:</p>
+        <div class="code-block">
+          curl -H "Content-Type: application/dns-message" \\<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--data-binary @query.dns \\<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${dnsEndpoint}
+        </div>
+        
+        <h3>Using Without Base64 Encoding</h3>
+        <p>To avoid base64 encoding entirely, use POST requests with the <code>Content-Type: application/dns-message</code> header. The DNS query is sent as raw binary data in the request body:</p>
+        <div class="code-block">
+          curl -H "Content-Type: application/dns-message" \\<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;--data-binary @query.dns \\<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${dnsEndpoint}
+        </div>
+      </div>
+      
+      <div class="card">
+        <h2>⚙️ Configuration</h2>
+        <p>This worker automatically balances requests across multiple DNS providers based on the configured weights. All DNS responses are cached for 5 minutes to improve performance.</p>
+        <p>For CORS support, the worker includes the following headers in all responses:</p>
+        <div class="code-block">
+          Access-Control-Allow-Origin: *<br>
+          Access-Control-Allow-Methods: GET, POST, OPTIONS<br>
+          Access-Control-Allow-Headers: Content-Type, Accept
+        </div>
+      </div>
+      
+      <footer>
+        <p>High-Performance DoH Proxy Worker | Powered by Cloudflare Workers</p>
+      </footer>
+    </div>
+    
+    <div class="copy-notification" id="copyNotification">Endpoint URL copied to clipboard!</div>
+    
+    <script>
+      // Fixed preferences - always dark theme
+      let currentTheme = 'dark';
+
+      // Initialize theme (always dark)
+      function initTheme() {
+        if (document.documentElement) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      }
+
+      // Typing effect function - simulates terminal typing
+      function typeText(element, text, minSpeed = 30, maxSpeed = 120) {
+        let i = 0;
+        element.textContent = '';
+        
+        function type() {
+          if (i < text.length) {
+            const char = text.charAt(i);
+            element.textContent += char;
+            i++;
+            
+            // Variable speed for more realistic typing
+            // Faster for spaces, slower for punctuation
+            let speed = minSpeed;
+            if (char === ' ' || char === '.') {
+              speed = minSpeed + Math.random() * 50;
+            } else if (char === ',' || char === ';' || char === ':') {
+              speed = minSpeed + Math.random() * 100;
+            } else {
+              speed = minSpeed + Math.random() * (maxSpeed - minSpeed);
+            }
+            
+            setTimeout(type, speed);
+          }
+        }
+        
+        // Small delay before starting
+        setTimeout(type, 500);
+      }
+
+      function copyToClipboard() {
+        const endpointUrl = document.getElementById('endpointUrl').textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(endpointUrl).then(() => {
+            const notification = document.getElementById('copyNotification');
+            if (notification) {
+              notification.classList.add('show');
+              setTimeout(() => {
+                notification.classList.remove('show');
+              }, 3000);
+            }
+          }).catch(err => {
+            console.error('Failed to copy: ', err);
+            fallbackCopy(endpointUrl);
+          });
+        } else {
+          fallbackCopy(endpointUrl);
+        }
+      }
+
+      function fallbackCopy(text) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          const notification = document.getElementById('copyNotification');
+          if (notification) {
+            notification.classList.add('show');
+            setTimeout(() => {
+              notification.classList.remove('show');
+            }, 3000);
+          }
+        } catch (err) {
+          console.error('Fallback copy failed', err);
+          alert('Failed to copy URL to clipboard. Please copy it manually: ' + text);
+        }
+        document.body.removeChild(textArea);
+      }
+
+      // Initialize everything when DOM is ready
+      function init() {
+        // Always use dark theme
+        currentTheme = 'dark';
+        
+        // Set theme first (always dark)
+        initTheme();
+        
+        // Start typing effect
+        const typingElement = document.getElementById('typing-text');
+        if (typingElement) {
+          const textToType = 'Hello, good luck, copy this and go to the heart of the internet.';
+          // Typing with variable speed (30-120ms) for realistic terminal effect
+          typeText(typingElement, textToType, 30, 120);
+        }
+      }
+
+      // Wait for DOM to be ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        // DOM is already loaded
+        init();
+      }
+      
+      // Expose copyToClipboard function globally
+      window.copyToClipboard = copyToClipboard;
+    </script>
+  </body>
+  </html>`;
+  
+  return new Response(html, {
     headers: {
-      "Content-Type": "application/dns-message",
-      "Content-Length": data.byteLength.toString(),
-      "X-Provider": providerName,
-      "Cache-Control": "public, max-age=300",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type,Accept",
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600'
     }
   });
 }
 
-async function proxyWithFailover(dnsQuery, originalMethod, config) {
-  const ordered = pickProviders(config.providers);
-  const errors = [];
+// Serve detailed DNS encoding explanation
+function serveDNSEncodingExplanation() {
+  const html = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNS Query Encoding in DoH - Explained</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --primary: #3b82f6;
+        --primary-dark: #2563eb;
+        --secondary: #10b981;
+        --dark: #1e293b;
+        --light: #f8fafc;
+        --gray: #94a3b8;
+        --border: #e2e8f0;
+      }
+      
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: 'Share Tech Mono', monospace;
+        line-height: 1.6;
+        color: var(--dark);
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+      
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+      
+      header {
+        text-align: center;
+        padding: 40px 20px;
+        margin-bottom: 30px;
+      }
+      
+      h1 {
+        font-size: 2.5rem;
+        margin-bottom: 15px;
+        color: var(--dark);
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .subtitle {
+        font-size: 1.2rem;
+        color: var(--gray);
+        max-width: 700px;
+        margin: 0 auto 25px;
+      }
+      
+      .card {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        padding: 30px;
+        margin-bottom: 30px;
+      }
+      
+      h2 {
+        font-size: 1.8rem;
+        margin-bottom: 20px;
+        color: var(--dark);
+        padding-bottom: 10px;
+        border-bottom: 2px solid var(--border);
+      }
+      
+      h3 {
+        font-size: 1.4rem;
+        margin: 25px 0 15px;
+        color: var(--dark);
+      }
+      
+      ul, ol {
+        margin-left: 30px;
+        margin-bottom: 20px;
+      }
+      
+      li {
+        margin-bottom: 10px;
+      }
+      
+      .code-block {
+        background: #0f172a;
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 15px 0;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.95rem;
+        overflow-x: auto;
+      }
+      
+      .back-link {
+        display: inline-block;
+        background: var(--primary);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 500;
+        margin-top: 15px;
+        transition: background 0.3s ease;
+      }
+      
+      .back-link:hover {
+        background: var(--primary-dark);
+      }
+      
+      footer {
+        text-align: center;
+        padding: 30px 0;
+        color: var(--gray);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>DNS Query Encoding in DNS-over-HTTPS</h1>
+        <p class="subtitle">Understanding why DNS queries must be base64url-encoded in DoH GET requests</p>
+      </header>
+      
+      <div class="card">
+        <h2>Why DNS Queries Must Be Encoded</h2>
+        
+        <p>When using DNS-over-HTTPS with GET requests, DNS queries must be encoded using base64url encoding. This requirement exists for several important technical reasons:</p>
+        
+        <h3>1. Binary Data in URLs</h3>
+        <p>DNS queries are binary data structures that contain information about the domain name being queried, the type of record requested (A, AAAA, MX, etc.), and other metadata. URLs, however, are text-based and have restrictions on what characters they can contain.</p>
+        
+        <h3>2. URL Safety</h3>
+        <p>Standard Base64 encoding uses characters like '+' and '/' which have special meanings in URLs:</p>
+        <ul>
+          <li>'+' is interpreted as a space in URL query parameters</li>
+          <li>'/' is interpreted as a path separator</li>
+        </ul>
+        
+        <p>Base64url encoding solves this by:</p>
+        <ul>
+          <li>Replacing '+' with '-'</li>
+          <li>Replacing '/' with '_'</li>
+          <li>Optionally omitting padding '=' characters</li>
+        </ul>
+        
+        <h3>3. RFC 8484 Compliance</h3>
+        <p>The DNS-over-HTTPS specification (RFC 8484) mandates the use of base64url encoding for DNS queries transmitted via GET requests to ensure interoperability between different DoH implementations.</p>
+        
+        <h2>Example Encoding Process</h2>
+        <ol>
+          <li>A DNS query for "example.com" is represented as binary data</li>
+          <li>This binary data is encoded using base64url encoding</li>
+          <li>The resulting string is safe to use in a URL query parameter</li>
+        </ol>
+        
+        <div class="code-block">
+Binary DNS Query → Base64url Encoding → URL Parameter
+[0x12, 0x34, ...] → "q80BAAAB..." → ?dns=q80BAAAB...</div>
+        
+        <h2>When Encoding is Required</h2>
+        <ul>
+          <li><strong>GET Requests</strong>: DNS queries MUST be base64url-encoded</li>
+          <li><strong>POST Requests</strong>: DNS queries are sent as binary data in the request body (no encoding needed)</li>
+        </ul>
+        
+        <h2>Tools for Encoding</h2>
+        <p>Many programming languages provide built-in functions for base64url encoding:</p>
+        <ul>
+          <li>JavaScript: Custom function using <code>btoa()</code> with character replacements</li>
+          <li>Python: <code>base64.urlsafe_b64encode()</code></li>
+          <li>Command-line: <code>openssl base64 -url</code></li>
+        </ul>
+        
+        <p>This encoding requirement ensures that DNS queries can be safely transmitted over HTTPS while maintaining compatibility with web standards and the DoH protocol specification.</p>
+        
+        <h2>Ad-Blocking Support</h2>
+        <p>This DoH proxy includes support for ad-blocking DNS providers. When using this service, DNS queries are automatically distributed across multiple providers including specialized ad-blocking services like AdGuard, ControlD, Mullvad, and NextDNS. These providers block ads, trackers, and malicious domains at the DNS level, providing an additional layer of privacy and security.</p>
+        
+        <a href="/" class="back-link">← Back to Main Page</a>
+      </div>
+      
+      <footer>
+        <p>High-Performance DoH Proxy Worker | Powered by Cloudflare Workers</p>
+      </footer>
+    </div>
+  </body>
+  </html>`;
+  
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600'
+    }
+  });
+}
 
-  for (const provider of ordered) {
+// Handle CORS preflight requests
+function handleCORS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Accept',
+      'Access-Control-Max-Age': '86400'
+    }
+  });
+}
+
+// Weighted random selection of DoH provider
+function selectProvider(providers) {
+  const totalWeight = providers.reduce((sum, provider) => sum + provider.weight, 0);
+  let random = Math.random() * totalWeight;
+  
+  for (const provider of providers) {
+    random -= provider.weight;
+    if (random <= 0) {
+      return provider;
+    }
+  }
+  
+  // Fallback to first provider
+  return providers[0];
+}
+
+// Try fallback providers when primary fails
+async function tryFallbackProviders(request, url, failedProvider, DOH_PROVIDERS, CACHE_TTL, requestBody, isPost) {
+  const fallbackProviders = DOH_PROVIDERS.filter(p => p.name !== failedProvider.name);
+  
+  for (const provider of fallbackProviders) {
     try {
-      const res = await fetchFromProvider(provider, dnsQuery, originalMethod);
-      return res;
-    } catch (e) {
-      errors.push(`${provider.name}:${e.message}`);
+      const response = await fetchFromProvider(
+        provider,
+        request,
+        url,
+        requestBody,
+        isPost
+      );
+
+      if (response.ok) {
+        return buildDnsResponse(response, provider, CACHE_TTL);
+      }
+    } catch (error) {
       continue;
     }
   }
-
-  return new Response(`All DNS providers are unavailable - ${errors.join(", ")}`, {
+  
+  // All providers failed
+  return new Response('All DNS providers are unavailable', { 
     status: 503,
-    headers: corsHeaders
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Content-Type': 'text/plain'
+    }
   });
 }
 
-const landingPage = `<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DoH Proxy | فعال</title>
-<style>
-body{font-family:Vazirmatn,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
-.card{background:#1e293b;padding:40px;border-radius:24px;box-shadow:0 20px 50px rgba(0,0,0,.5);max-width:500px;text-align:center;border:1px solid #334155}
-h1{color:#22c55e} code{background:#0f172a;padding:4px 8px;border-radius:8px;direction:ltr;display:inline-block;margin:5px 0}
-.badge{background:#22c55e;color:#000;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:bold}
-</style>
-</head>
-<body>
-<div class="card">
-<span class="badge">● LIVE</span>
-<h1>✅ DoH Proxy فعاله</h1>
-<p>Endpoint:</p>
-<code>/dns-query</code>
-<p style="margin-top:20px;font-size:14px;opacity:.7">تست:?dns=q80BAAABAAAAAAAAA3d3dwdleGFtcGxlA2NvbQAAAQAB باید 200 بده<br>هدر X-Provider نشون میده کدوم سرور جواب داده</p>
-</div>
-</body>
-</html>`;
