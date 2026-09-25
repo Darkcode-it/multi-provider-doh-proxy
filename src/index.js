@@ -1435,82 +1435,295 @@
 
 
 
-function parseProviderItem(provider) {
-  if (typeof provider === 'string') {
+// function parseProviderItem(provider) {
+//   if (typeof provider === 'string') {
+//     try {
+//       const parsed = JSON.parse(provider);
+//       if (parsed && parsed.url) return { name: parsed.name || parsed.url, url: parsed.url, weight: parsed.weight || 10 };
+//     } catch {}
+//     return { name: provider, url: provider, weight: 10 };
+//   }
+//   if (provider && provider.url) return { name: provider.name || provider.url, url: provider.url, weight: provider.weight || 10 };
+//   return null;
+// }
+// function getConfig(env) {
+//   const CACHE_TTL = env.CACHE_TTL? parseInt(env.CACHE_TTL) : 300;
+//   let DOH_PROVIDERS;
+//   if (env.PROVIDERS) {
+//     try {
+//       let providers = typeof env.PROVIDERS === 'string'? JSON.parse(env.PROVIDERS) : env.PROVIDERS;
+//       if (Array.isArray(providers)) DOH_PROVIDERS = providers.map(parseProviderItem).filter(p=>p&&p.url);
+//     } catch {}
+//   }
+//   if (!DOH_PROVIDERS || DOH_PROVIDERS.length === 0) {
+//     DOH_PROVIDERS = [
+//       { name: "Cloudflare", url: "https://cloudflare-dns.com/dns-query", weight: 50 },
+//       { name: "Google", url: "https://dns.google/dns-query", weight: 30 },
+//       { name: "Quad9", url: "https://dns.quad9.net/dns-query", weight: 20 }
+//     ];
+//   }
+//   return { CACHE_TTL, DOH_PROVIDERS };
+// }
+
+// export default { async fetch(req, env, ctx) { return handleRequest(req, env, ctx); } };
+
+// async function handleRequest(request, env, ctx) {
+//   const { CACHE_TTL, DOH_PROVIDERS } = getConfig(env);
+//   const url = new URL(request.url);
+//   if (url.pathname === '/') return new Response('Worker OK - Use /dns-query', { status: 200 });
+//   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Accept' } });
+//   if (url.pathname!== '/dns-query') return new Response('Use /dns-query', { status: 400 });
+//   if (request.method === 'GET' &&!url.searchParams.has('dns')) return new Response('Missing dns param', { status: 400 });
+
+//   const isPost = request.method === 'POST';
+//   const requestBody = isPost? await request.arrayBuffer() : undefined;
+//   const selected = DOH_PROVIDERS[Math.floor(Math.random()*DOH_PROVIDERS.length)];
+
+//   // تلاش
+//   for (const provider of DOH_PROVIDERS) {
+//     try {
+//       const resp = await fetchFromProvider(provider, request, url, requestBody, isPost);
+//       if (resp.ok) return buildResp(resp, provider, CACHE_TTL);
+//     } catch (e) { console.log(`Fail ${provider.name}: ${e.message}`); }
+//   }
+//   return new Response('All DNS providers are unavailable - ' + DOH_PROVIDERS.map(p=>p.name).join(','), { status: 503, headers: { 'Access-Control-Allow-Origin': '*' } });
+// }
+
+// async function fetchFromProvider(provider, request, url, requestBody, isPost) {
+//   // مهم: برای GET اصلا body نفرست
+//   const targetUrl = provider.url + url.search;
+//   const controller = new AbortController();
+//   const t = setTimeout(()=>controller.abort(), 4000);
+//   const init = {
+//     method: request.method,
+//     headers: { 'Accept': 'application/dns-message',...(isPost? {'Content-Type':'application/dns-message'} : {}) },
+//     signal: controller.signal,
+//     redirect: 'follow'
+//   };
+//   if (isPost && requestBody) init.body = requestBody;
+
+//   try { return await fetch(targetUrl, init); }
+//   finally { clearTimeout(t); }
+// }
+
+// function buildResp(response, provider, ttl) {
+//   const h = new Headers(response.headers);
+//   h.set('Access-Control-Allow-Origin', '*');
+//   h.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+//   h.set('Cache-Control', `public, max-age=${ttl}`);
+//   h.set('X-Provider', provider.name);
+//   return new Response(response.body, { status: response.status, headers: h });
+// } 
+
+
+
+
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+
+    // Landing page
+    if (url.pathname === "/" || url.pathname === "/index.html") {
+      return new Response(landingPage, {
+        headers: { "Content-Type": "text/html; charset=utf-8" }
+      });
+    }
+
+    if (url.pathname!== "/dns-query") {
+      return new Response("Not Found - Use /dns-query", { status: 404 });
+    }
+
+    // CORS preflight
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+    if (request.method!== "GET" && request.method!== "POST") {
+      return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
+    }
+
     try {
-      const parsed = JSON.parse(provider);
-      if (parsed && parsed.url) return { name: parsed.name || parsed.url, url: parsed.url, weight: parsed.weight || 10 };
-    } catch {}
-    return { name: provider, url: provider, weight: 10 };
+      const config = getConfig(env);
+      const dnsQuery = await getDnsQuery(request);
+
+      if (!dnsQuery) {
+        return new Response("Missing DNS query", { status: 400, headers: corsHeaders });
+      }
+
+      // Try cache first
+      const cacheKey = new Request(url.toString(), request);
+      const cache = caches.default;
+      let response = await cache.match(cacheKey);
+      if (response) {
+        return response;
+      }
+
+      response = await proxyWithFailover(dnsQuery, request.method, config);
+
+      // Cache successful responses
+      if (response.status === 200) {
+        ctx.waitUntil(cache.put(cacheKey, response.clone()));
+      }
+
+      return response;
+
+    } catch (err) {
+      return new Response(`Error: ${err.message}`, { status: 500, headers: corsHeaders });
+    }
   }
-  if (provider && provider.url) return { name: provider.name || provider.url, url: provider.url, weight: provider.weight || 10 };
-  return null;
 }
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type,Accept",
+  "Access-Control-Max-Age": "86400",
+};
+
 function getConfig(env) {
-  const CACHE_TTL = env.CACHE_TTL? parseInt(env.CACHE_TTL) : 300;
-  let DOH_PROVIDERS;
-  if (env.PROVIDERS) {
-    try {
-      let providers = typeof env.PROVIDERS === 'string'? JSON.parse(env.PROVIDERS) : env.PROVIDERS;
-      if (Array.isArray(providers)) DOH_PROVIDERS = providers.map(parseProviderItem).filter(p=>p&&p.url);
-    } catch {}
+  try {
+    const providers = JSON.parse(env.PROVIDERS || "[]");
+    return {
+      providers: providers,
+      cacheTtl: parseInt(env.CACHE_TTL || "300"),
+    };
+  } catch {
+    // fallback if vars broken
+    return {
+      providers: [
+        { name: "Cloudflare", url: "https://cloudflare-dns.com/dns-query", weight: 50 },
+        { name: "Google", url: "https://dns.google/dns-query", weight: 50 },
+      ],
+      cacheTtl: 300,
+    };
   }
-  if (!DOH_PROVIDERS || DOH_PROVIDERS.length === 0) {
-    DOH_PROVIDERS = [
-      { name: "Cloudflare", url: "https://cloudflare-dns.com/dns-query", weight: 50 },
-      { name: "Google", url: "https://dns.google/dns-query", weight: 30 },
-      { name: "Quad9", url: "https://dns.quad9.net/dns-query", weight: 20 }
-    ];
-  }
-  return { CACHE_TTL, DOH_PROVIDERS };
 }
 
-export default { async fetch(req, env, ctx) { return handleRequest(req, env, ctx); } };
-
-async function handleRequest(request, env, ctx) {
-  const { CACHE_TTL, DOH_PROVIDERS } = getConfig(env);
+async function getDnsQuery(request) {
   const url = new URL(request.url);
-  if (url.pathname === '/') return new Response('Worker OK - Use /dns-query', { status: 200 });
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Accept' } });
-  if (url.pathname!== '/dns-query') return new Response('Use /dns-query', { status: 400 });
-  if (request.method === 'GET' &&!url.searchParams.has('dns')) return new Response('Missing dns param', { status: 400 });
-
-  const isPost = request.method === 'POST';
-  const requestBody = isPost? await request.arrayBuffer() : undefined;
-  const selected = DOH_PROVIDERS[Math.floor(Math.random()*DOH_PROVIDERS.length)];
-
-  // تلاش
-  for (const provider of DOH_PROVIDERS) {
+  if (request.method === "GET") {
+    const dnsParam = url.searchParams.get("dns");
+    if (!dnsParam) return null;
+    // Validate base64url
     try {
-      const resp = await fetchFromProvider(provider, request, url, requestBody, isPost);
-      if (resp.ok) return buildResp(resp, provider, CACHE_TTL);
-    } catch (e) { console.log(`Fail ${provider.name}: ${e.message}`); }
+      // Convert base64url to bytes to validate
+      const base64 = dnsParam.replace(/-/g, '+').replace(/_/g, '/');
+      atob(base64);
+      return dnsParam;
+    } catch {
+      return null;
+    }
+  } else {
+    // POST - body is the DNS query
+    const buf = await request.clone().arrayBuffer();
+    if (buf.byteLength === 0) return null;
+    return buf;
   }
-  return new Response('All DNS providers are unavailable - ' + DOH_PROVIDERS.map(p=>p.name).join(','), { status: 503, headers: { 'Access-Control-Allow-Origin': '*' } });
 }
 
-async function fetchFromProvider(provider, request, url, requestBody, isPost) {
-  // مهم: برای GET اصلا body نفرست
-  const targetUrl = provider.url + url.search;
+function pickProviders(providers) {
+  // Weighted shuffle
+  const weighted = [];
+  for (const p of providers) {
+    const w = p.weight || 10;
+    for (let i = 0; i < w; i++) weighted.push(p);
+  }
+  // Fisher-Yates shuffle
+  for (let i = weighted.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [weighted[i], weighted[j]] = [weighted[j], weighted[i]];
+  }
+  // Unique by name, keep order
+  const seen = new Set();
+  const result = [];
+  for (const p of weighted) {
+    if (!seen.has(p.name)) {
+      seen.add(p.name);
+      result.push(p);
+    }
+  }
+  return result;
+}
+
+async function fetchFromProvider(provider, dnsQuery, method, timeoutMs = 2000) {
   const controller = new AbortController();
-  const t = setTimeout(()=>controller.abort(), 4000);
-  const init = {
-    method: request.method,
-    headers: { 'Accept': 'application/dns-message',...(isPost? {'Content-Type':'application/dns-message'} : {}) },
-    signal: controller.signal,
-    redirect: 'follow'
-  };
-  if (isPost && requestBody) init.body = requestBody;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-  try { return await fetch(targetUrl, init); }
-  finally { clearTimeout(t); }
+  try {
+    let reqUrl = provider.url;
+    let body = undefined;
+    let headers = {
+      "Accept": "application/dns-message",
+      "Content-Type": "application/dns-message",
+    };
+
+    if (typeof dnsQuery === "string") {
+      // GET
+      reqUrl = `${provider.url}?dns=${dnsQuery}`;
+      method = "GET";
+    } else {
+      // POST
+      body = dnsQuery.slice(0); // clone buffer
+      method = "POST";
+    }
+
+    const res = await fetch(reqUrl, {
+      method,
+      headers,
+      body,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) throw new Error(`Upstream ${provider.name} returned ${res.status}`);
+
+    const data = await res.arrayBuffer();
+    return buildResp(data, provider.name);
+
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
-function buildResp(response, provider, ttl) {
-  const h = new Headers(response.headers);
-  h.set('Access-Control-Allow-Origin', '*');
-  h.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  h.set('Cache-Control', `public, max-age=${ttl}`);
-  h.set('X-Provider', provider.name);
-  return new Response(response.body, { status: response.status, headers: h });
+function buildResp(data, providerName) {
+  return new Response(data, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/dns-message",
+      "Content-Length": data.byteLength.toString(),
+      "X-Provider": providerName,
+      "Cache-Control": "public, max-age=300",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type,Accept",
+    }
+  });
 }
+
+async function proxyWithFailover(dnsQuery, originalMethod, config) {
+  const ordered = pickProviders(config.providers);
+  const errors = [];
+
+  for (const provider of ordered) {
+    try {
+      const res = await fetchFromProvider(provider, dnsQuery, originalMethod);
+      return res;
+    } catch (e) {
+      errors.push(`${provider.name}:${e.message}`);
+      console.log(`Failover: ${provider.name} failed - ${e.message}`);
+      continue;
+    }
+  }
+
+  return new Response(`All DNS providers are unavailable - ${errors.join(", ")}`, {
+    status: 503,
+    headers: corsHeaders
+  });
+}
+
+const landingPage = `<!DOCTYPE html><html><head><title>DoH Proxy Active</title></head><body style="font-family:sans-serif;text-align:center;padding:50px">
+<h1>✅ DoH Proxy is Running</h1>
+<p>Endpoint: <code>/dns-query</code></p>
+<p>Test: <code>?dns=q80BAAABAAAAAAAAA3d3dwdleGFtcGxlA2NvbQAAAQAB</code> should return 200</p>
+<p>X-Provider header shows which upstream served you</p>
+</body></html>`;

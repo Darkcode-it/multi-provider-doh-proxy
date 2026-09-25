@@ -1,13 +1,7 @@
 name = "multi-provider-doh-proxy"
-compatibility_date = "2024-01-01"
 main = "src/index.js"
+compatibility_date = "2024-11-01"
 
 [vars]
-CACHE_TTL = 300
-PROVIDERS = '[{"name":"Shecan","url":"https://dns.shecan.ir/dns-query","weight":30},{"name":"403.online","url":"https://dns.403.online/dns-query","weight":30},{"name":"Begzar","url":"https://dns.begzar.ir/dns-query","weight":20},{"name":"RadarGame","url":"https://dns.radargame.com/dns-query","weight":20}]'
-
-[env.production]
-name = "doh-proxy-worker"
-
-[env.development]
-name = "doh-proxy-worker-dev"
+CACHE_TTL = "300"
+PROVIDERS = '''[{"name":"Cloudflare","url":"https://cloudflare-dns.com/dns-query","weight":50},{"name":"Google","url":"https://dns.google/dns-query","weight":30},{"name":"Quad9","url":"https://dns.quad9.net/dns-query","weight":20}]'''
