@@ -1,0 +1,7 @@
+name = "multi-provider-doh-proxy"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+CACHE_TTL = "300"
+PROVIDERS = '''[{"name":"Cloudflare","url":"https://cloudflare-dns.com/dns-query","weight":20},{"name":"Google","url":"https://dns.google/dns-query","weight":15},{"name":"Quad9","url":"https://dns.quad9.net/dns-query","weight":15},{"name":"OpenDNS","url":"https://doh.opendns.com/dns-query","weight":10},{"name":"AdGuard","url":"https://dns.adguard.com/dns-query","weight":10},{"name":"ControlD","url":"https://freedns.controld.com/p2","weight":10},{"name":"Mullvad","url":"https://adblock.dns.mullvad.net/dns-query","weight":10},{"name":"NextDNS","url":"https://dns.nextdns.io/dns-query","weight":10}]'''
